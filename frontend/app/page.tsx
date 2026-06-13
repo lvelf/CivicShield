@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { WorldMap } from "@/src/components/WorldMap";
+import { DonateWidget } from "@/src/components/DonateWidget";
+import { AgentIdentity } from "@/src/components/AgentIdentity";
 import {
   useCivicShield,
   type ProposalRecord,
@@ -129,15 +131,20 @@ function ReliefMap({
   return (
     <section id="map" className="bg-[#fafaf9]">
       <div className="mx-auto max-w-6xl px-6 py-20">
-        <p className="font-sans text-sm uppercase tracking-[0.2em] text-stone-400">Relief in motion</p>
-        <h2 className="mt-3 max-w-2xl font-serif text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
-          Money moves <span className="italic">toward</span> the disaster.
-        </h2>
-        <p className="mt-4 max-w-2xl text-lg text-stone-600">
-          Donors fund the pool from any chain; a verified hazard signal is what sends relief out.
-          The figures below are live from Base mainnet — the outbound arc brightens once a real
-          release has executed. Donor origins are illustrative (any chain, any country).
-        </p>
+        <div className="grid items-start gap-10 lg:grid-cols-[1.4fr_1fr]">
+          <div>
+            <p className="font-sans text-sm uppercase tracking-[0.2em] text-stone-400">Relief in motion</p>
+            <h2 className="mt-3 max-w-2xl font-serif text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
+              Money moves <span className="italic">toward</span> the disaster.
+            </h2>
+            <p className="mt-4 max-w-2xl text-lg text-stone-600">
+              Donors fund the pool from any chain; a verified hazard signal is what sends relief out.
+              The figures below are live from Base mainnet — the outbound arc brightens once a real
+              release has executed. Donor origins are illustrative (any chain, any country).
+            </p>
+          </div>
+          <DonateWidget />
+        </div>
 
         <div className="mt-10 overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-8">
           <WorldMap executed={executed} blocked={blocked} />
@@ -332,6 +339,7 @@ export default function Home() {
       <Hero poolBalance={poolBalance} />
       <ReliefMap poolBalance={poolBalance} totalReleased={totalReleased} executed={executed} blocked={blocked} />
       <HowItWorks />
+      <AgentIdentity />
       <TransparencyLog proposals={proposals} executed={executed} blocked={blocked} />
       <Footer />
     </div>
