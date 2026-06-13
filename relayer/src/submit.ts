@@ -10,7 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { topFloodRisk, type CapAlert } from '../../cre/src/score.ts'
 
 const RPC = process.env.RPC_URL ?? 'https://mainnet.base.org'
-const POOL = (process.env.POOL_ADDRESS ?? '0xc8f383373b05243419281c5073c1bc39f4d9c7f4') as Hex
+const POOL = (process.env.POOL_ADDRESS ?? '0x8df17313f37f5418868f1c3c369bbde4dba9daa6') as Hex
 const AREA = process.env.AREA ?? 'IL'
 const SCOPE_STR = process.env.FUND_SCOPE ?? 'US|flood' // must match the pool's fundScope
 const UA = 'CivicShield-relayer/1.0 (ETHGlobal hackathon; nuo.rosemary@gmail.com)'

@@ -25,20 +25,23 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
 
     // ---- policy Pi ----
     uint8 public riskThreshold; // rule 1: riskScore must be >= this
-    uint256 public maxReleasePerEvent; // rule 2: per-proposal cap
+    uint256 public maxReleasePerEvent; // rule 2: per-proposal cap (hard — above this is BLOCKED)
     uint256 public dailyReleaseLimit; // rule 3: trace-level cap per UTC day
+    uint256 public reviewThreshold = type(uint256).max; // >= this needs human/Ledger approval; max = disabled
     mapping(address => bool) public verifiedRecipients; // rule 4: ENS-subname allowlist (addresses)
     mapping(bytes32 => bool) public approvedPurposes; // rule 5: keccak256(purpose) allowlist
 
     // ---- trusted off-chain actors ----
     address public agent; // proposes (no fund keys); see proposeRelease access note
     address public relayer; // delivers CRE risk scores
+    address public approver; // human-in-the-loop signer (e.g. a Ledger) for large releases
 
     // ---- state ----
     mapping(bytes32 => uint8) private _riskScore; // eventId => score (0..100)
     mapping(bytes32 => bytes32) private _eventScope; // eventId => scope (relayer-attested; NOT agent-claimed)
     Proposal[] private _proposals;
     mapping(uint256 => Verdict) private _verdicts;
+    mapping(uint256 => bool) private _approved; // proposalId => human-approved (for review tier)
 
     uint256 private _releasedToday; // running total of EXECUTED releases within _lastReleaseDay
     uint256 private _lastReleaseDay; // UTC day index (block.timestamp / 1 days) of last execution
@@ -50,6 +53,11 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
 
     modifier onlyAgent() {
         require(msg.sender == agent, "not agent");
+        _;
+    }
+
+    modifier onlyApprover() {
+        require(msg.sender == approver, "not approver");
         _;
     }
 
@@ -69,6 +77,7 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         usdc = IERC20(_usdc);
         agent = _agent;
         relayer = _relayer;
+        approver = msg.sender; // defaults to owner; setApprover() to point at a Ledger address
         fundScope = _fundScope;
         riskThreshold = _riskThreshold;
         maxReleasePerEvent = _maxReleasePerEvent;
@@ -98,12 +107,12 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
     }
 
     /// @inheritdoc ICivicShieldPool
-    /// @dev Permissionless: the policy gates the money, not the caller. Idempotent guard prevents
-    ///      re-evaluating an already-settled proposal.
+    /// @dev Permissionless: the policy gates the money, not the caller. Re-callable while a proposal
+    ///      is PENDING or PENDING_REVIEW (so it can proceed once a large release is approved).
     function executeRelease(uint256 id) external {
         require(id < _proposals.length, "bad id");
         Verdict storage v = _verdicts[id];
-        require(v.status == ProposalStatus.PENDING, "already settled");
+        require(v.status == ProposalStatus.PENDING || v.status == ProposalStatus.PENDING_REVIEW, "settled");
         Proposal storage p = _proposals[id];
 
         FailReason reason = _evaluate(p);
@@ -117,6 +126,13 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
             return;
         }
 
+        // Policy-clean, but a large release needs a human/Ledger approval first — hold it.
+        if (p.amount >= reviewThreshold && !_approved[id]) {
+            v.status = ProposalStatus.PENDING_REVIEW;
+            emit ReviewRequired(id, p.recipient, p.amount);
+            return;
+        }
+
         // PASSED — commit the trace-level daily total, then move the money.
         _accrueDaily(p.amount);
         v.status = ProposalStatus.EXECUTED;
@@ -124,6 +140,17 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         v.failReason = FailReason.NONE;
         emit ActionEvaluated(id, p.recipient, p.amount, p.purpose, true, FailReason.NONE);
         usdc.safeTransfer(p.recipient, p.amount);
+    }
+
+    /// @inheritdoc ICivicShieldPool
+    /// @dev Human-in-the-loop: the approver (e.g. a Ledger) signs off on a large release. After
+    ///      this, anyone can call executeRelease again and it proceeds (policy is re-checked).
+    function approveRelease(uint256 id) external onlyApprover {
+        require(id < _proposals.length, "bad id");
+        ProposalStatus s = _verdicts[id].status;
+        require(s == ProposalStatus.PENDING || s == ProposalStatus.PENDING_REVIEW, "settled");
+        _approved[id] = true;
+        emit ReleaseApproved(id, msg.sender);
     }
 
     /// @inheritdoc ICivicShieldPool
@@ -209,6 +236,14 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         riskThreshold = _riskThreshold;
         maxReleasePerEvent = _maxReleasePerEvent;
         dailyReleaseLimit = _dailyReleaseLimit;
+    }
+
+    function setReviewThreshold(uint256 _reviewThreshold) external onlyOwner {
+        reviewThreshold = _reviewThreshold;
+    }
+
+    function setApprover(address _approver) external onlyOwner {
+        approver = _approver;
     }
 
     function setAgent(address _agent) external onlyOwner {

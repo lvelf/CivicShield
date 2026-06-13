@@ -188,7 +188,7 @@ contract CivicShieldPoolTest is Test {
     function test_CannotReExecuteSettledProposal() public {
         uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood);
         pool.executeRelease(id);
-        vm.expectRevert(bytes("already settled"));
+        vm.expectRevert(bytes("settled"));
         pool.executeRelease(id);
     }
 
@@ -248,6 +248,43 @@ contract CivicShieldPoolTest is Test {
         uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventNoSignal);
         pool.executeRelease(id);
         assertEq(uint256(_verdict(id).failReason), uint256(FailReason.EVENT_SCOPE_MISMATCH));
+    }
+
+    // --- human-in-the-loop review tier (Ledger) -------------------------------
+
+    function test_LargeRelease_GoesToReview_ThenApproveExecutes() public {
+        pool.setReviewThreshold(200e6); // releases >= 200 USDC need approval
+        uint256 big = 300e6; // within the 500 cap, but over the review threshold
+        uint256 id = _propose(shelter, big, "emergency_shelter", eventFlood);
+
+        // First execute: policy-clean, but held for human review (no transfer).
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.PENDING_REVIEW));
+        assertEq(usdc.balanceOf(shelter), 0);
+
+        // Approver (Ledger) signs off; then it executes.
+        pool.approveRelease(id); // test contract is owner, and approver defaults to owner
+        uint256 balBefore = usdc.balanceOf(shelter);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.EXECUTED));
+        assertEq(usdc.balanceOf(shelter) - balBefore, big);
+    }
+
+    function test_SmallRelease_AutoExecutes_NoReview() public {
+        pool.setReviewThreshold(200e6);
+        uint256 small = 100e6; // below the review threshold
+        uint256 id = _propose(shelter, small, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.EXECUTED));
+    }
+
+    function test_OnlyApproverCanApprove() public {
+        pool.setReviewThreshold(200e6);
+        uint256 id = _propose(shelter, 300e6, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        vm.prank(attacker);
+        vm.expectRevert(bytes("not approver"));
+        pool.approveRelease(id);
     }
 
     // --- access control: onlyAgent can propose --------------------------------

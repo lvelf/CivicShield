@@ -3,11 +3,11 @@
 ## Base Mainnet (chain 8453) — MAIN LINE (LI.FI Composer + CRE + ENS)
 
 The coherent product. LI.FI Composer's destination-deposit feature is **mainnet-only** (no
-testnet, and not Arc), so the donation→certify→release flow lives here on real (tiny) money.
+testnets), so the donation→certify→release flow lives here on real (tiny) money.
 
 | Contract | Address |
 |---|---|
-| `CivicShieldPool` (current) | [`0xc8f383373b05243419281c5073c1bc39f4d9c7f4`](https://basescan.org/address/0xc8f383373b05243419281c5073c1bc39f4d9c7f4) |
+| `CivicShieldPool` (current) | [`0x8df17313f37f5418868f1c3c369bbde4dba9daa6`](https://basescan.org/address/0x8df17313f37f5418868f1c3c369bbde4dba9daa6) |
 | Real Circle USDC (6 dp) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
 ABI + address for the frontend: `contracts/deployments/base-mainnet.json`.
@@ -21,32 +21,12 @@ ABI + address for the frontend: `contracts/deployments/base-mainnet.json`.
   connected wallet as `donor`. `Donated` also carries the pool's scope.
 - **`submitRiskScore(eventId, score, eventScope)`** — relayer attests score AND scope; the agent
   cannot claim an event is in-scope. Mismatch → `EVENT_SCOPE_MISMATCH`.
-- LI.FI Composer `contractCalls` confirmed routable to Base mainnet (and to Arc only as a plain
-  bridge, not a deposit) — see [lifi-composer-findings.md](./lifi-composer-findings.md). Composer
-  link proven live on an earlier pool (tx 0x75ed2d4d…); re-run on the current pool for a clean log.
+- LI.FI Composer `contractCalls` confirmed routable to Base mainnet — see
+  [lifi-composer-findings.md](./lifi-composer-findings.md). Composer link proven live on an earlier
+  pool (tx 0x75ed2d4d…); re-run on the current pool for a clean log.
 
 > **Predecessors:** `0x5e99…fcf5` (pre donor-fix), `0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7`
 > (pre scope/onlyAgent). Both superseded by the current address above.
-
-## Arc Testnet (chain 5042002) — BONUS (Circle/Arc conditional-escrow prize)
-
-Circle's Arc L1. **Native gas token is USDC** (6 dp). The pool holds real Circle testnet USDC
-(`0x3600…`, a standard ERC-20), so this satisfies the Arc "advanced stablecoin logic /
-conditional escrow" bounty directly. LI.FI routes **Arbitrum Sepolia → Arc** (LI.FI Intents),
-so a donor on Arbitrum Sepolia funds the Arc pool via Composer in one Flow.
-
-| Contract | Address |
-|---|---|
-| `CivicShieldPool` | [`0x18df0335e1355135339532ccd718aee27cfa5581`](https://testnet.arcscan.app/address/0x18df0335e1355135339532ccd718aee27cfa5581) |
-| Real Circle USDC (gas + escrow token, 6 dp) | `0x3600000000000000000000000000000000000000` |
-
-- **Owner / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`
-- **Policy:** riskThreshold 75 · maxReleasePerEvent 500 USDC · dailyReleaseLimit 1000 USDC
-- RPC `https://rpc.testnet.arc.network` · explorer `testnet.arcscan.app` · faucet `faucet.circle.com`
-- **Verified live with REAL USDC:** funded pool 5 USDC → released 2 USDC to verified recipient
-  (`EXECUTED`); blocked 2 USDC to unverified `0x…dEaD` (`BLOCKED / RECIPIENT_NOT_VERIFIED`), pool unchanged.
-
-
 
 ## Ethereum Sepolia (chain 11155111) — first bring-up
 

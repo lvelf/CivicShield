@@ -49,7 +49,7 @@ export async function submitProposal(p: DraftProposal): Promise<{ hash: Hex; id:
 	const pk = process.env.PRIVATE_KEY as Hex | undefined
 	if (!pk) throw new Error('set PRIVATE_KEY (agent key — must equal the pool.agent)')
 	const rpc = process.env.RPC_URL ?? 'https://mainnet.base.org'
-	const pool = (process.env.POOL_ADDRESS ?? '0xc8f383373b05243419281c5073c1bc39f4d9c7f4') as Hex
+	const pool = (process.env.POOL_ADDRESS ?? '0x8df17313f37f5418868f1c3c369bbde4dba9daa6') as Hex
 
 	const account = privateKeyToAccount(pk)
 	const pub = createPublicClient({ transport: http(rpc) })

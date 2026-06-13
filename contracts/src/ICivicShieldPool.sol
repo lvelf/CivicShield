@@ -24,7 +24,8 @@ enum FailReason {
 enum ProposalStatus {
     PENDING,
     EXECUTED,
-    BLOCKED
+    BLOCKED,
+    PENDING_REVIEW // policy-clean but awaiting human/Ledger approval (large release)
 }
 
 struct Verdict {
@@ -54,6 +55,10 @@ interface ICivicShieldPool {
     ///         (region|hazard). Scope comes from this trusted path, never from the agent's proposal.
     function submitRiskScore(bytes32 eventId, uint8 score, bytes32 eventScope) external;
 
+    /// @notice Human-in-the-loop approval (e.g. a Ledger) for a release >= reviewThreshold.
+    ///         After approval, executeRelease proceeds. onlyApprover.
+    function approveRelease(uint256 id) external;
+
     /// @notice Deposit USDC into the escrow pool (LI.FI Composer destination).
     /// @param amount USDC (base units) pulled from msg.sender via transferFrom.
     /// @param donor  Address credited in the Transparency Log. Pass the connected wallet — NOT
@@ -77,6 +82,8 @@ interface ICivicShieldPool {
     function riskScoreOf(bytes32 eventId) external view returns (uint8);
     function eventScopeOf(bytes32 eventId) external view returns (bytes32);
     function fundScope() external view returns (bytes32);
+    function reviewThreshold() external view returns (uint256);
+    function approver() external view returns (address);
     function releasedToday() external view returns (uint256); // trace-level running total
     function poolBalance() external view returns (uint256);
 
@@ -94,4 +101,8 @@ interface ICivicShieldPool {
 
     event RiskScoreSubmitted(bytes32 indexed eventId, uint8 score, bytes32 indexed eventScope);
     event Donated(address indexed from, uint256 amount, bytes32 indexed scope);
+
+    /// @notice A policy-clean release is held pending human/Ledger approval (amount >= reviewThreshold).
+    event ReviewRequired(uint256 indexed id, address indexed recipient, uint256 amount);
+    event ReleaseApproved(uint256 indexed id, address indexed approver);
 }

@@ -1,7 +1,7 @@
 {
   "chainId": 8453,
   "network": "base-mainnet",
-  "CivicShieldPool": "0xc8f383373b05243419281c5073c1bc39f4d9c7f4",
+  "CivicShieldPool": "0x8df17313f37f5418868f1c3c369bbde4dba9daa6",
   "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "abi": [
     {
@@ -83,6 +83,19 @@
     },
     {
       "type": "function",
+      "name": "approveRelease",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
       "name": "approvedPurposes",
       "inputs": [
         {
@@ -96,6 +109,19 @@
           "name": "",
           "type": "bool",
           "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "approver",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
         }
       ],
       "stateMutability": "view"
@@ -470,6 +496,19 @@
     },
     {
       "type": "function",
+      "name": "reviewThreshold",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "riskScoreOf",
       "inputs": [
         {
@@ -533,6 +572,19 @@
     },
     {
       "type": "function",
+      "name": "setApprover",
+      "inputs": [
+        {
+          "name": "_approver",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
       "name": "setPolicy",
       "inputs": [
         {
@@ -562,6 +614,19 @@
           "name": "_relayer",
           "type": "address",
           "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "setReviewThreshold",
+      "inputs": [
+        {
+          "name": "_reviewThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -755,6 +820,50 @@
           "type": "bytes32",
           "indexed": true,
           "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ReleaseApproved",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "approver",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ReviewRequired",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "recipient",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "amount",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
         }
       ],
       "anonymous": false

@@ -6,7 +6,7 @@ import type { Assessment, CapAlert } from './types.ts'
 
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
 const APPROVED_PURPOSES = ['emergency_shelter', 'medical_supplies', 'clean_water', 'evacuation_transport']
-const MAX_USDC = Number(process.env.MAX_RELEASE_USDC ?? 500) // mirror maxReleasePerEvent
+const MAX_USDC = Number(process.env.MAX_RELEASE_USDC ?? 10) // mirror maxReleasePerEvent (real-money demo)
 
 const SYSTEM = `You are the assessor sub-agent for CivicShield, an on-chain flood-relief fund.
 You receive ONE active US National Weather Service flood alert. Decide whether it is severe enough

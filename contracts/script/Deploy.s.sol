@@ -17,9 +17,11 @@ import {MockUSDC} from "../test/MockUSDC.sol";
 ///                  --rpc-url optimism_sepolia --broadcast -vvvv
 contract Deploy is Script {
     // --- policy Pi (tune before deploy) ---
+    // Small, real-money demo scale (mainnet uses real USDC).
     uint8 constant RISK_THRESHOLD = 75;
-    uint256 constant MAX_RELEASE_PER_EVENT = 500e6; // 500 USDC per proposal
-    uint256 constant DAILY_RELEASE_LIMIT = 1000e6; // 1000 USDC per UTC day (trace-level)
+    uint256 constant MAX_RELEASE_PER_EVENT = 10e6; // 10 USDC per proposal (hard cap)
+    uint256 constant DAILY_RELEASE_LIMIT = 20e6; // 20 USDC per UTC day (trace-level)
+    uint256 constant REVIEW_THRESHOLD = 5e6; // >= 5 USDC needs human/Ledger approval
     uint256 constant MOCK_POOL_FUNDING = 100_000e6; // USDC minted to the pool in mock mode
     bytes32 constant FUND_SCOPE = keccak256("US|flood"); // this deployment: all-US flood relief
 
@@ -48,6 +50,9 @@ contract Deploy is Script {
         CivicShieldPool pool = new CivicShieldPool(
             usdc, agent, relayer, FUND_SCOPE, RISK_THRESHOLD, MAX_RELEASE_PER_EVENT, DAILY_RELEASE_LIMIT, purposes, recipients
         );
+
+        // Enable the human-in-the-loop review tier (>= 5 USDC needs approver/Ledger sign-off).
+        pool.setReviewThreshold(REVIEW_THRESHOLD);
 
         if (useMock) {
             // Pre-fund the escrow so executeRelease can actually pay out in the demo.
