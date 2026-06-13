@@ -1,7 +1,7 @@
 {
   "chainId": 8453,
   "network": "base-mainnet",
-  "CivicShieldPool": "0x5e9972027d4f03824ac0e5da446f0afb5bfffcf5",
+  "CivicShieldPool": "0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7",
   "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "abi": [
     {
@@ -111,6 +111,11 @@
           "name": "amount",
           "type": "uint256",
           "internalType": "uint256"
+        },
+        {
+          "name": "donor",
+          "type": "address",
+          "internalType": "address"
         }
       ],
       "outputs": [],

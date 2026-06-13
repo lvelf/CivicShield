@@ -12,6 +12,8 @@ contract CivicShieldPoolTest is Test {
     CivicShieldPool pool;
     MockUSDC usdc;
 
+    event Donated(address indexed from, uint256 amount); // mirror for vm.expectEmit
+
     address owner = address(this);
     address relayer = makeAddr("relayer");
     address agent = makeAddr("agent");
@@ -197,8 +199,33 @@ contract CivicShieldPoolTest is Test {
         vm.startPrank(donor);
         usdc.approve(address(pool), 1_000e6);
         uint256 before = pool.poolBalance();
-        pool.donate(1_000e6);
+        pool.donate(1_000e6, donor);
         vm.stopPrank();
         assertEq(pool.poolBalance() - before, 1_000e6);
+    }
+
+    function test_Donate_CreditsDonorNotMsgSender_ComposerCase() public {
+        // Simulate LI.FI Composer: an executor holds the swapped USDC and calls donate on the
+        // donor's behalf. The Donated event must credit the donor, not the executor (msg.sender).
+        address lifiExecutor = makeAddr("lifi-executor");
+        address realDonor = makeAddr("alice");
+        usdc.mint(lifiExecutor, 50e6);
+        uint256 before = pool.poolBalance();
+        vm.startPrank(lifiExecutor);
+        usdc.approve(address(pool), 50e6);
+        vm.expectEmit(true, false, false, true, address(pool));
+        emit Donated(realDonor, 50e6); // <-- realDonor, NOT lifiExecutor
+        pool.donate(50e6, realDonor);
+        vm.stopPrank();
+        assertEq(pool.poolBalance() - before, 50e6);
+    }
+
+    function test_Donate_RejectsZeroDonor() public {
+        usdc.mint(donor, 10e6);
+        vm.startPrank(donor);
+        usdc.approve(address(pool), 10e6);
+        vm.expectRevert(bytes("donor=0"));
+        pool.donate(10e6, address(0));
+        vm.stopPrank();
     }
 }

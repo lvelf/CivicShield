@@ -246,3 +246,9 @@ all four tabs at H2. Mirrors `getProposal` return shape.
 
 ## Change log
 - *(H0)* Initial freeze — 5 policies, FailReason enum, eventId = keccak256(NWS alert id).
+- *(update)* Added deposit entrypoint **`donate(uint256 amount, address donor)`**. `donor` is the
+  address shown in the Transparency Log — **pass the connected wallet, NOT `msg.sender`**. On a
+  LI.FI Composer deposit, `msg.sender` is LI.FI's executor contract (it holds the swapped USDC and
+  has approved the pool), so crediting `msg.sender` would label every Composer donation with the
+  same LI.FI address. Frontend encodes the donor into the contract-call calldata. Funds always move
+  from `msg.sender` via `transferFrom`; `donor` is a label only.

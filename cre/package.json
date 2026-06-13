@@ -1,0 +1,11 @@
+{
+  "name": "civicshield-cre",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chainlink CRE workflow: api.weather.gov hazard data -> deterministic riskScore for CivicShieldPool",
+  "scripts": {
+    "score": "node --experimental-strip-types src/fetchAndScore.ts",
+    "score:ny": "node --experimental-strip-types src/fetchAndScore.ts NY"
+  }
+}
