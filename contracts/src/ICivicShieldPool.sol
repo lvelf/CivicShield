@@ -52,7 +52,10 @@ interface ICivicShieldPool {
     function submitRiskScore(bytes32 eventId, uint8 score) external;
 
     /// @notice Deposit USDC into the escrow pool (LI.FI Composer destination).
-    function donate(uint256 amount) external;
+    /// @param amount USDC (base units) pulled from msg.sender via transferFrom.
+    /// @param donor  Address credited in the Transparency Log. Pass the connected wallet — NOT
+    ///               msg.sender, which is the LI.FI executor on Composer deposits.
+    function donate(uint256 amount, address donor) external;
 
     // ---- reads (frontend) ----
 

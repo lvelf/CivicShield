@@ -120,10 +120,17 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
     }
 
     /// @inheritdoc ICivicShieldPool
-    function donate(uint256 amount) external {
+    /// @dev `donor` is recorded for the Transparency Log; it is NOT msg.sender. When the deposit
+    ///      arrives via LI.FI Composer, msg.sender is LI.FI's executor contract (which has been
+    ///      approved to move the swapped USDC) — recording it would attribute every Composer
+    ///      donation to the same LI.FI address. The frontend encodes the connected wallet as
+    ///      `donor` in the contract-call calldata so "donors verify" holds. Attribution is a label,
+    ///      not fund-bearing: funds always move from msg.sender via transferFrom.
+    function donate(uint256 amount, address donor) external {
         require(amount > 0, "amount=0");
+        require(donor != address(0), "donor=0");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
-        emit Donated(msg.sender, amount);
+        emit Donated(donor, amount);
     }
 
     // ---------------------------------------------------------------------
