@@ -41,7 +41,7 @@ jobs:
           AGENT_SIGNER: privy
           RPC_URL: https://mainnet.base.org
           POOL_ADDRESS: '0x8df17313f37f5418868f1c3c369bbde4dba9daa6'
-          AREA: IL
+          AREA: US
           FUND_SCOPE: 'US|flood'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
@@ -74,5 +74,5 @@ jobs:
   #         PRIVATE_KEY: ${{ secrets.RELAYER_PRIVATE_KEY }}
   #         RPC_URL: https://mainnet.base.org
   #         POOL_ADDRESS: '0x8df17313f37f5418868f1c3c369bbde4dba9daa6'
-  #         AREA: IL
+  #         AREA: US
   #       run: node --experimental-strip-types src/submit.ts

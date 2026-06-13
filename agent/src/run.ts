@@ -10,7 +10,7 @@ import { submitProposal, eventIdOf } from './propose.ts'
 import { checkRateLimit, recordProposal } from './ratelimit.ts'
 import type { DraftProposal } from './types.ts'
 
-const AREA = process.env.AREA ?? 'IL'
+const AREA = process.env.AREA ?? 'US' // nationwide flood monitoring ("US"/"ALL"/empty = whole country)
 const SCOPE = process.env.FUND_SCOPE ?? 'US|flood'
 const RECIPIENT = (process.env.VERIFIED_RECIPIENT ?? '0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA') as `0x${string}`
 
