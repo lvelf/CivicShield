@@ -44,48 +44,56 @@ For a normal DeFi agent, risk is the brake. For a relief fund, **disaster risk i
 ![CivicShield architecture flow](docs/architecture.png)
 
 ```
-                    ┌──────────────────────────────────────────────┐
-   Donors           │                CivicShieldPool               │
-   (any chain,      │           (escrow on Base mainnet)           │
-    any token)      │                                              │
-      │             │  Policy Π (6 rules):                         │
-      ▼             │   • fundScope match  (region|hazard intent)  │
- ┌───────────┐      │   • riskThreshold      (e.g. flood ≥ 75)     │
- │  LI.FI    │ USDC │   • maxReleasePerEvent                       │
- │ Composer  ├─────►│   • dailyReleaseLimit  (trace-level)         │
- │ (1 Flow:  │      │   • verifiedRecipients (ENS subnames)        │
- │ swap+     │      │   • approvedPurposes                         │
- │ bridge+   │      │                                              │
- │ deposit)  │      │  ActionEvaluated events → Transparency Log   │
- └───────────┘      └───────▲──────────────────────────┬───────────┘
-                            │ proposeRelease()         │ executeRelease()
-                            │ (structured JSON,        │ (only if ALL
-                            │  no keys to funds)       │  policy checks pass)
-                    ┌───────┴────────┐         ┌───────▼────────┐
-                    │ flood-risk-    │         │ shelter-fund   │
-                    │ agent.eth      │         │ .eth           │
-                    │ (LLM agent,    │         │ (verified      │
-                    │  ENSIP-26      │         │  recipient via │
-                    │  text records) │         │  ENS subname)  │
-                    └───────▲────────┘         └────────────────┘
-                            │ riskScore (via relayer)
-                    ┌───────┴────────┐
-                    │ Chainlink CRE  │
-                    │ workflow:      │
-                    │ NWS alerts API │
-                    │ (api.weather   │
-                    │  .gov) →       │
-                    │ riskScore      │
-                    └────────────────┘
+  DONATION INTAKE                          HAZARD ORACLE (trust-minimized)
+  Donor — any token, any chain             Chainlink CRE workflow (TS):
+       │                                   api.weather.gov alerts → riskScore
+       │  LI.FI Composer:                        │
+       │  swap → USDC → donate()  (1 sig)        │  relayer submits on-chain:
+       ▼                                         ▼  submitRiskScore(eventId, score, scope)
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │  CivicShieldPool   ·   escrow + policy   ·   Base mainnet                 │
+ │                                                                          │
+ │  Policy Π — checked in order, first failure wins, EVERY outcome logged:   │
+ │   0 fundScope (donor intent)   1 riskThreshold ≥ 75   2 maxReleasePerEvent│
+ │   3 dailyReleaseLimit (trace)  4 verifiedRecipient    5 approvedPurpose   │
+ │                                                                          │
+ │  executeRelease(): all rules pass →                                       │
+ │     amount ≥ reviewThreshold → PENDING_REVIEW (await Ledger)              │
+ │     else                      → transfer USDC to the verified recipient   │
+ │  → emits ActionEvaluated (pass OR block) → Transparency Log               │
+ └─────▲────────────────────────────────▲──────────────────────┬───────────┘
+       │ proposeRelease()                │ approveRelease()      │ USDC out
+       │ onlyAgent · no fund keys        │ onlyApprover          ▼
+ ┌─────┴────────────────────┐    ┌───────┴────────┐    ┌────────────────────┐
+ │ Multi-agent proposer      │    │ Ledger device  │    │ verified recipient  │
+ │ supervisor → assessor     │    │ human-in-the-  │    │ shelter-fund.eth    │
+ │ (OpenAI) · rate-limited   │    │ loop for large │    │ (ENS subname)       │
+ │ signs via Privy Agent     │    │ releases       │    └────────────────────┘
+ │ Wallet · GitHub Actions   │    └────────────────┘
+ │ cron (no raw key)         │
+ └───────────────────────────┘
 ```
 
 **Settlement chain: Base mainnet.** LI.FI Composer's "deposit into your contract in one Flow" feature is mainnet-only (no testnets), so the coherent *donate → certify → release* demo runs on Base mainnet with tiny real USDC. The contract is chain-portable. Live addresses + the proven end-to-end flow are in [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md); LI.FI routing findings in [`docs/lifi-composer-findings.md`](docs/lifi-composer-findings.md).
 
 **Two trusted off-chain paths, kept separate from the chain's authority:**
 - **Chainlink CRE** (the oracle): a TypeScript CRE workflow pulls live NWS alerts from `api.weather.gov`, computes a deterministic `riskScore` (no LLM in the consensus path — nodes must agree), and a **relayer** submits the score *and* the event's attested scope on-chain (`submitRiskScore`). Verified by a successful CRE simulation (real Illinois flood → riskScore 90).
-- **Multi-agent proposer** (off-chain LLM, OpenAI): a *supervisor* monitors the scope cheaply; on an anomaly it spawns an *assessor* sub-agent that judges severity and drafts a structured proposal, gating low-severity noise before it costs gas. Only the designated agent can `proposeRelease` (`onlyAgent`). The agents' judgment is **never trusted** by the chain — a manipulated or wrong agent can only *miss* a disaster or get blocked by policy, **never cause a wrongful release**. The on-chain `riskScore` comes from CRE, not the agent.
+- **Multi-agent proposer** (off-chain LLM, OpenAI): a *supervisor* monitors the scope cheaply; on an anomaly it spawns an *assessor* sub-agent that judges severity and drafts a structured proposal, gating low-severity noise before it costs gas. Only the designated agent can `proposeRelease` (`onlyAgent`), and that agent is a **Privy Agent Wallet** — it holds no raw key (Privy custodies it), and runs free on a GitHub Actions cron. The agents' judgment is **never trusted** by the chain — a manipulated or wrong agent can only *miss* a disaster or get blocked by policy, **never cause a wrongful release**. The on-chain `riskScore` comes from CRE, not the agent.
 
 **On-chain human-in-the-loop (Ledger).** Releases ≥ `reviewThreshold` are held in `PENDING_REVIEW` until the `approver` — a **Ledger** hardware wallet — signs `approveRelease`. The agent and policy can clear a release for *consideration*, but moving large value still needs a device-certified human signature. (Demo scale, real USDC: auto < \$5 · Ledger review \$5–\$10 · blocked > \$10.)
+
+### System components (the full backend)
+
+| Layer | Module | Tech | Role | Status |
+|---|---|---|---|---|
+| Escrow + policy | `contracts/` `CivicShieldPool` | Solidity · Foundry · **Base mainnet** | 6-rule certification (scope→risk→cap→daily→recipient→purpose) + tiered Ledger approval + `ActionEvaluated` transparency log | ✅ live · 19 tests |
+| Hazard oracle | `cre/` + `hazard-workflow/` | Chainlink **CRE** (TS) | `api.weather.gov` → deterministic `riskScore` (consensus, no LLM) | ✅ simulated |
+| Score delivery | `relayer/` | viem | submit `riskScore` + attested scope on-chain | ✅ verified |
+| Proposer (AI) | `agent/` | OpenAI + **Privy** Agent Wallet · GitHub Actions cron | supervisor → assessor → `proposeRelease`, rate-limited, no raw key | ✅ live on free cron |
+| Approval | — | **Ledger** | `approveRelease` for large releases | ✅ wired |
+| Donation intake | `frontend/` | Next.js · wagmi · **LI.FI Composer** | one-click: any token → swap + `donate()` in one signature | ✅ live |
+
+**End-to-end flow:** donor → LI.FI Composer → pool · weather.gov → CRE → relayer → on-chain `riskScore` · supervisor → assessor(OpenAI) → Privy-signed `proposeRelease` · `executeRelease` → 6-rule policy → release, or `PENDING_REVIEW` → Ledger `approveRelease`. Every outcome logged on-chain.
 
 ---
 
@@ -160,6 +168,13 @@ Two genuine integrations:
 2. **Subnames as access tokens:** `shelter-fund.eth` and sibling subnames *are* the verified-recipient allowlist. The policy contract resolves `verifiedRecipients` from ENS; issuing a subname is issuing certification.
 
 ENS is the trust fabric: donors can verify *who* the agent is and *who* can receive funds, by name.
+
+### Privy — *Best AI agent built with Privy*
+The proposer agent signs `proposeRelease` with a **Privy Agent Wallet** (server wallet) — created via
+the Privy server SDK, custodied by Privy, so no raw key ever lives on our server or in CI. The agent
+performs a real on-chain action (submitting a structured relief proposal) entirely through its Privy
+wallet, and the wallet address is the contract's `onlyAgent` principal. This is what lets the agent
+run unattended (GitHub Actions cron) without a private key sitting in a secret.
 
 ### Ledger — *AI Agents x Ledger*
 A manipulated or buggy AI must never move large public money unchecked. CivicShield makes a **Ledger** hardware wallet the `approver`: any release ≥ `reviewThreshold` is frozen in `PENDING_REVIEW` until the Ledger device signs `approveRelease`. Ledger-backed security is the central gate on high-value autonomous actions — the AI proposes, the policy certifies, and a human device authorizes the large ones.
