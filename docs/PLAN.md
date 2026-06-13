@@ -21,11 +21,13 @@ deep integrations). See [INTERFACES.md](INTERFACES.md) for the frozen module con
 
 These are the things that historically eat a whole day. Spike a hello-world for each first.
 
-- [ ] **(B)** LI.FI Composer actually routes to **Base Sepolia** (you already got burned on Arc — verify before designing the Flow around it)
+- [x] **(B)** ~~LI.FI routes to Base Sepolia~~ → **RESOLVED: LI.FI Composer is mainnet-only.** Pivot locked: deploy the pool on **Base mainnet** with demo-scale real funds. Still spike a real Composer route to Base mainnet (tiny amount) before building the Flow.
 - [ ] **(A)** CRE CLI runs one minimal `simulation` end-to-end (env/toolchain setup is the time-sink)
-- [ ] **(Both)** ENS testnet **subname issuance + on-chain/ frontend resolution** path works round-trip
+- [ ] **(Both)** ENS **mainnet** subname issuance + frontend resolution round-trip (mainnet `.eth` names — real, and a plus with ENS judges; remember text-record writes cost **L1 gas**, so plan subnames once)
 
 If any fails, fall back early (documented mock + "production path" note in Honest Limitations) rather than burning hours.
+
+> **💰 Real-money rules (Base mainnet, demo-scale).** Pool funded ≤ $30 · `maxReleasePerEvent` 5 USDC · `dailyReleaseLimit` 15 USDC · **no admin/owner withdrawal function** (only outflow is policy-certified `executeRelease`) · deploy from a **fresh wallet** holding nothing else. Keep every demo amount aligned to **5 USDC** (README, frontend, policy params all say 5).
 
 ---
 
@@ -36,7 +38,25 @@ If any fails, fall back early (documented mock + "production path" note in Hones
 - [ ] Freeze `eventId = keccak256(NWS alert "id")` — confirm the exact NWS field name
 - [ ] Register ENS names: `flood-risk-agent.eth`, `shelter-fund.eth` (+ optional `medical-fund.eth`)
 - [ ] Commit mock fixtures to `frontend/src/mocks/proposals.json`
-- [ ] Deploy a **contract skeleton** (no logic) to Base Sepolia so B has a real address + ABI early
+- [ ] Deploy a **contract skeleton** (no logic) to Base mainnet so B has a real address + ABI early
+
+---
+
+## 💸 Wallet & funding prep (do TONIGHT — don't scramble Saturday)
+
+Mainnet means real ETH/USDC for gas and demo funds. Fund these before the clock starts. Use
+**fresh wallets** (no personal assets), split the ~$60–80 between the two of you.
+
+- [ ] **Deployer** (Base): ~$10 ETH — contract deploy + many txs
+- [ ] **Donor demo** (Arbitrum, if Act 1 stays cross-chain): ~$25 ETH — the cross-chain donation + gas
+- [ ] **Relayer** (Base): ~$5 ETH — `submitRiskScore` txs
+- [ ] **Pool funding**: ≤ $30 USDC total (demo releases are 5 USDC each)
+- [ ] **ENS** (Ethereum L1): ~$5/yr for a 5+ char `.eth` name + ~$20 L1 gas for subnames & ENSIP-26 text-record writes — **plan subnames once**, writes cost real gas
+- [ ] All keys are fresh wallets holding nothing else (real money + unaudited contract)
+
+> **Act 1 fallback:** get the **single-chain** path working first (Base ETH → USDC → deposit)
+> as a safety net, then upgrade to the cross-chain version (Arbitrum ETH → swap → bridge →
+> Base deposit) which scores best with LI.FI. Record whichever is stable.
 
 ---
 
@@ -56,8 +76,9 @@ If any fails, fall back early (documented mock + "production path" note in Hones
 - [ ] Emit `ActionEvaluated` on **every** evaluation (pass AND block) — this is the Transparency Log's data source
 - [ ] Read getters: `getProposal`, `proposalCount`, `policy`, `releasedToday`
 - [ ] Access control: only `flood-risk-agent.eth`'s address may `proposeRelease`; only relayer may `submitRiskScore`; `executeRelease` permissionless (verdict is deterministic)
+- [ ] **No admin/owner withdrawal path** — the only outflow is `executeRelease`; do not add an "emergency drain" (it's an attack surface and contradicts the trust story). Caps: `maxReleasePerEvent` 5 USDC, `dailyReleaseLimit` 15 USDC. Deploy from a **fresh wallet**.
 - [ ] Tests: each of the 5 fail reasons + the happy path + the Act 4 split-payment trace
-- [ ] Deploy to Base Sepolia, record address in `docs/` + README Quick Links
+- [ ] Deploy to Base mainnet, record address in `docs/` + README Quick Links
 - [ ] Maintain & publish ABI for B (export to `frontend/src/abi/`)
 
 ## M2 — `cre/` Chainlink CRE workflow (TS SDK)
@@ -72,7 +93,7 @@ If any fails, fall back early (documented mock + "production path" note in Hones
 ## M3 — `relayer/`
 
 - [ ] Read CRE simulation output `{ eventId, score }`
-- [ ] Call `submitRiskScore(eventId, score)` on Base Sepolia
+- [ ] Call `submitRiskScore(eventId, score)` on Base mainnet
 - [ ] Idempotency: don't double-submit the same eventId
 - [ ] Document the relayer step honestly (it's the "CRE simulation → chain" bridge; live CRE network = production path)
 
@@ -92,7 +113,7 @@ If any fails, fall back early (documented mock + "production path" note in Hones
 
 ## M6a — LI.FI Composer donation (Act 1)
 
-- [ ] After verifying routing to Base Sepolia (death-point), build the single Flow: **swap + bridge + deposit** into `CivicShieldPool`
+- [ ] After verifying routing to Base mainnet (death-point), build the single Flow: **swap + bridge + deposit** into `CivicShieldPool` (real money — test with $1 first)
 - [ ] One signature, any-token/any-chain → USDC into the pool (escrow-style deposit destination)
 - [ ] Pool balance visibly rises after the donation
 - [ ] Optional: attach the Act 3 "injection" message to a donation to set up the firewall demo
@@ -116,11 +137,11 @@ If any fails, fall back early (documented mock + "production path" note in Hones
 
 | Window | Nuo (A) | Rosemary (B) |
 |---|---|---|
-| **H0–2** | co-write M0; deploy contract skeleton to Base Sepolia; register ENS names | co-write M0; frontend scaffold + mock fixtures live |
+| **H0–2** | co-write M0; deploy contract skeleton to Base mainnet; register ENS names | co-write M0; frontend scaffold + mock fixtures live |
 | **H2–12** | full Pool + 5 policies, deploy; publish ABI | LI.FI donation Flow working against the deployed pool; ENS resolution |
 | **H12–20** | CRE → relayer → contract end-to-end; riskScore on-chain | Transparency Log reads `ActionEvaluated`; agent proposals hit the contract |
 | **H20–28** | three-act demo wired; Act 3 injection blocked live | polish UI / Transparency Log; Act 4 stretch if time |
-| **H28–33** | testnet dress rehearsal; record demo video; addresses into docs/ | submit each sponsor form (GitHub repo + ≤ few-min video each) |
+| **H28–33** | mainnet dress rehearsal (tiny amounts); record demo video; addresses into docs/ | submit each sponsor form (GitHub repo + ≤ few-min video each) |
 | **H33–36** | buffer + booth prep (ENS asks for Sunday-AM booth demo) | same |
 
 ---
