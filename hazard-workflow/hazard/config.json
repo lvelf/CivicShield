@@ -1,0 +1,6 @@
+{
+  "schedule": "0 */5 * * * *",
+  "url": "https://api.weather.gov/alerts/active?area=NY",
+  "userAgent": "CivicShield/1.0 (ETHGlobal hackathon; nuo.rosemary@gmail.com)",
+  "riskThreshold": 75
+}
