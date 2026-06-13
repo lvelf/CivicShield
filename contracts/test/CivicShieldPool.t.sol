@@ -1,0 +1,204 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Test} from "forge-std/Test.sol";
+import {CivicShieldPool} from "../src/CivicShieldPool.sol";
+import {Proposal, Verdict, FailReason, ProposalStatus} from "../src/ICivicShieldPool.sol";
+import {MockUSDC} from "./MockUSDC.sol";
+
+/// @notice Full policy-path coverage for the Permissibility Machine. Mirrors the four mock
+///         fixtures in docs/INTERFACES.md plus the Act-4 split-payment (trace-level) attack.
+contract CivicShieldPoolTest is Test {
+    CivicShieldPool pool;
+    MockUSDC usdc;
+
+    address owner = address(this);
+    address relayer = makeAddr("relayer");
+    address agent = makeAddr("agent");
+    address donor = makeAddr("donor");
+
+    address shelter = makeAddr("shelter-fund.eth"); // verified recipient
+    address medical = makeAddr("medical-fund.eth"); // verified recipient
+    address attacker = makeAddr("0xAttacker"); // NOT verified
+
+    bytes32 eventFlood = keccak256("nws-alert-flood-001");
+    bytes32 eventNoSignal = keccak256("nws-alert-none-002");
+
+    uint8 constant THRESHOLD = 75;
+    uint256 constant MAX_PER_EVENT = 500e6; // 500 USDC
+    uint256 constant DAILY_LIMIT = 800e6; // 800 USDC
+    uint256 constant STD_AMOUNT = 300e6; // 300 USDC
+
+    function setUp() public {
+        usdc = new MockUSDC();
+
+        string[] memory purposes = new string[](4);
+        purposes[0] = "emergency_shelter";
+        purposes[1] = "medical_supplies";
+        purposes[2] = "clean_water";
+        purposes[3] = "evacuation_transport";
+
+        address[] memory recipients = new address[](2);
+        recipients[0] = shelter;
+        recipients[1] = medical;
+
+        pool = new CivicShieldPool(
+            address(usdc), relayer, THRESHOLD, MAX_PER_EVENT, DAILY_LIMIT, purposes, recipients
+        );
+
+        // Fund the escrow generously so transfers never fail for lack of balance.
+        usdc.mint(address(pool), 100_000e6);
+
+        // A qualifying real-world hazard signal exists for the flood event.
+        vm.prank(relayer);
+        pool.submitRiskScore(eventFlood, 82);
+        // eventNoSignal intentionally left at 0.
+    }
+
+    // --- helpers -------------------------------------------------------------
+
+    function _propose(address recipient, uint256 amount, string memory purpose, bytes32 eventId)
+        internal
+        returns (uint256 id)
+    {
+        Proposal memory p = Proposal({
+            recipient: recipient,
+            amount: amount,
+            purpose: pool.purposeHash(purpose),
+            eventId: eventId,
+            reasoning: "test"
+        });
+        vm.prank(agent);
+        id = pool.proposeRelease(p);
+    }
+
+    function _verdict(uint256 id) internal view returns (Verdict memory v) {
+        (, v) = pool.getProposal(id);
+    }
+
+    // --- happy path ----------------------------------------------------------
+
+    function test_HappyPath_ExecutesAndPaysVerifiedRecipient() public {
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood);
+
+        uint256 balBefore = usdc.balanceOf(shelter);
+        pool.executeRelease(id);
+
+        Verdict memory v = _verdict(id);
+        assertEq(uint256(v.status), uint256(ProposalStatus.EXECUTED));
+        assertTrue(v.passed);
+        assertEq(uint256(v.failReason), uint256(FailReason.NONE));
+        assertEq(usdc.balanceOf(shelter) - balBefore, STD_AMOUNT);
+        assertEq(pool.releasedToday(), STD_AMOUNT);
+    }
+
+    // --- rule 1: risk below threshold (fixture #3) ---------------------------
+
+    function test_Block_RiskBelowThreshold() public {
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventNoSignal);
+        pool.executeRelease(id);
+
+        Verdict memory v = _verdict(id);
+        assertEq(uint256(v.status), uint256(ProposalStatus.BLOCKED));
+        assertEq(uint256(v.failReason), uint256(FailReason.RISK_BELOW_THRESHOLD));
+        assertEq(usdc.balanceOf(shelter), 0);
+    }
+
+    // --- rule 2: amount over per-event cap -----------------------------------
+
+    function test_Block_AmountOverEventCap() public {
+        uint256 id = _propose(shelter, MAX_PER_EVENT + 1, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).failReason), uint256(FailReason.AMOUNT_OVER_EVENT_CAP));
+    }
+
+    // --- rule 4: recipient not verified (fixture #1, Act 3 injection) ---------
+
+    function test_Block_PromptInjection_RecipientNotVerified() public {
+        // The LLM was tricked into proposing a huge transfer to the attacker.
+        // It is over the cap AND unverified; rule 2 fires first by evaluation order.
+        uint256 id = _propose(attacker, 999_000e6, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).failReason), uint256(FailReason.AMOUNT_OVER_EVENT_CAP));
+
+        // A within-cap transfer to the attacker is blocked squarely at rule 4.
+        uint256 id2 = _propose(attacker, STD_AMOUNT, "emergency_shelter", eventFlood);
+        pool.executeRelease(id2);
+        assertEq(uint256(_verdict(id2).failReason), uint256(FailReason.RECIPIENT_NOT_VERIFIED));
+        assertEq(usdc.balanceOf(attacker), 0);
+    }
+
+    // --- rule 5: purpose not approved (fixture #2) ---------------------------
+
+    function test_Block_PurposeNotApproved() public {
+        uint256 id = _propose(shelter, STD_AMOUNT, "buy_gpu_cluster", eventFlood);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).failReason), uint256(FailReason.PURPOSE_NOT_APPROVED));
+    }
+
+    // --- rule 3: trace-level daily limit (Act 4 split-payment attack) ---------
+
+    function test_Block_SplitPaymentExceedsDailyLimit() public {
+        // Each release is within the per-event cap (rule 2 passes every time)...
+        uint256 id1 = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood); // 300
+        pool.executeRelease(id1);
+        assertTrue(_verdict(id1).passed);
+
+        uint256 id2 = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood); // 300 -> 600
+        pool.executeRelease(id2);
+        assertTrue(_verdict(id2).passed);
+
+        // ...but the THIRD would push the day's trace to 900 > 800. Blocked at the trace level.
+        uint256 id3 = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood); // 300 -> 900
+        pool.executeRelease(id3);
+        assertEq(uint256(_verdict(id3).failReason), uint256(FailReason.DAILY_LIMIT_EXCEEDED));
+        assertEq(pool.releasedToday(), 600e6); // only the two executed releases count
+    }
+
+    function test_DailyLimit_ResetsNextUtcDay() public {
+        uint256 id1 = _propose(shelter, MAX_PER_EVENT, "emergency_shelter", eventFlood); // 500
+        pool.executeRelease(id1);
+        assertEq(pool.releasedToday(), MAX_PER_EVENT);
+
+        // Next day: the running total resets, so a fresh release is allowed again.
+        vm.warp(block.timestamp + 1 days);
+        assertEq(pool.releasedToday(), 0);
+
+        uint256 id2 = _propose(shelter, MAX_PER_EVENT, "emergency_shelter", eventFlood); // 500
+        pool.executeRelease(id2);
+        assertTrue(_verdict(id2).passed);
+        assertEq(pool.releasedToday(), MAX_PER_EVENT);
+    }
+
+    // --- invariants & access control -----------------------------------------
+
+    function test_CannotReExecuteSettledProposal() public {
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        vm.expectRevert(bytes("already settled"));
+        pool.executeRelease(id);
+    }
+
+    function test_OnlyRelayerCanSubmitRiskScore() public {
+        vm.prank(attacker);
+        vm.expectRevert(bytes("not relayer"));
+        pool.submitRiskScore(eventFlood, 100);
+    }
+
+    function test_BlockedProposalEmitsButDoesNotRevert() public {
+        // Regression guard for the core narrative: a blocked attack is RECORDED, never reverted.
+        uint256 id = _propose(attacker, STD_AMOUNT, "emergency_shelter", eventFlood);
+        pool.executeRelease(id); // must not revert
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.BLOCKED));
+    }
+
+    function test_Donate_IncreasesPoolBalance() public {
+        usdc.mint(donor, 1_000e6);
+        vm.startPrank(donor);
+        usdc.approve(address(pool), 1_000e6);
+        uint256 before = pool.poolBalance();
+        pool.donate(1_000e6);
+        vm.stopPrank();
+        assertEq(pool.poolBalance() - before, 1_000e6);
+    }
+}
