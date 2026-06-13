@@ -1,22 +1,25 @@
 import type { Abi } from "viem";
-import abi from "@/src/abi/CivicShieldPool.json";
+import deployment from "@/src/deployments/base-mainnet.json";
 
-// CivicShieldPool ABI (extracted from Nuo's compiled contract — OnChain branch).
-export const POOL_ABI = abi as unknown as Abi;
+// SINGLE SOURCE OF TRUTH: everything (address, ABI, chain, USDC) is read straight from the
+// deployment artifact Nuo commits. When the contract is redeployed, just refresh that file
+// (`npm run sync:deployment`) — no code edits, no hand-copying the address or ABI anywhere.
+export const POOL_ADDRESS = deployment.CivicShieldPool as `0x${string}`;
+export const POOL_ABI = deployment.abi as unknown as Abi;
+export const POOL_CHAIN_ID = Number(deployment.chainId); // 8453 = Base mainnet
+export const USDC_ADDRESS = deployment.USDC as `0x${string}`;
 
-// Deployed address comes from the environment. Until Nuo deploys, this is unset and the
-// app falls back to mock fixtures. Set NEXT_PUBLIC_POOL_ADDRESS in .env.local to go live.
-export const POOL_ADDRESS = (process.env.NEXT_PUBLIC_POOL_ADDRESS ?? "") as `0x${string}` | "";
-
-// true once a real address is configured — flips the whole UI from mocks to on-chain reads.
+// true once a real address is present — flips the whole UI from mocks to on-chain reads.
 export const IS_LIVE = /^0x[a-fA-F0-9]{40}$/.test(POOL_ADDRESS);
-
-// Which chain the pool is deployed on. 84532 = Base Sepolia (rehearsal), 8453 = Base mainnet.
-export const POOL_CHAIN_ID = Number(process.env.NEXT_PUBLIC_POOL_CHAIN_ID ?? "84532");
 
 // ---- enum mappings (contract returns uints; mirror docs/INTERFACES.md) ----
 
-export const STATUS = ["PENDING", "EXECUTED", "BLOCKED"] as const;
+// ProposalStatus enum order (contract): index 3 PENDING_REVIEW = policy-clean but awaiting
+// Ledger approval for a large release.
+export const STATUS = ["PENDING", "EXECUTED", "BLOCKED", "PENDING_REVIEW"] as const;
+
+// FailReason enum order (contract). EVENT_SCOPE_MISMATCH was appended at index 6, so 0–5 are
+// unchanged; it is CHECKED FIRST in _evaluate (scope/donor-intent before everything else).
 export const FAIL_REASON_NAME = [
   "NONE",
   "RISK_BELOW_THRESHOLD",
@@ -24,6 +27,7 @@ export const FAIL_REASON_NAME = [
   "DAILY_LIMIT_EXCEEDED",
   "RECIPIENT_NOT_VERIFIED",
   "PURPOSE_NOT_APPROVED",
+  "EVENT_SCOPE_MISMATCH",
 ] as const;
 
 // purpose is stored on-chain as keccak256(string); reverse-map the known approved purposes

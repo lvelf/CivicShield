@@ -18,14 +18,14 @@ type Phase = "idle" | "connecting" | "quoting" | "signing" | "pending" | "error"
 const PRESETS = [1, 5, 10];
 
 function friendlyError(e: unknown): string {
-  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
-  if (/user rejected|denied|rejected the request/.test(msg)) return "You rejected the request in your wallet.";
+  const raw = e instanceof Error ? e.message : String(e);
+  const msg = raw.toLowerCase();
+  // Only map errors we're CERTAIN about — everything else shows the raw message so we can debug.
+  if (/user rejected|user denied|rejected the request/.test(msg)) return "You rejected the request in your wallet.";
   if (/insufficient funds/.test(msg)) return "Not enough ETH on Base mainnet to cover the donation + gas.";
-  if (/chain|network|unsupported/.test(msg)) return "Switch your wallet to Base mainnet (real funds — testnet won't route).";
-  if (/no available quotes|no route|1002/.test(msg)) return "LI.FI couldn't route this right now — try a different amount.";
+  if (/no available quotes|no route|1002/.test(msg)) return "LI.FI couldn't find a route for this amount — try $5.";
   if (/no wallet/.test(msg)) return "No wallet found. Install MetaMask.";
-  const raw = e instanceof Error ? e.message : "Donation failed";
-  return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+  return raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
 }
 
 export function DonateWidget() {
@@ -86,10 +86,18 @@ export function DonateWidget() {
       const tx = await getDonateTx(account as `0x${string}`, amount);
 
       setPhase("signing");
-      const h = await sendTransactionAsync({ to: tx.to, data: tx.data, value: tx.value, gas: tx.gas, chainId: 8453 });
+      const h = await sendTransactionAsync({
+        to: tx.to,
+        data: tx.data,
+        value: tx.value,
+        gas: tx.gas,
+        gasPrice: tx.gasPrice, // send LI.FI's legacy tx as-is (avoids EIP-1559 fee estimation)
+        chainId: 8453,
+      });
       setHash(h);
       setPhase("pending");
     } catch (e: unknown) {
+      console.error("[donate] raw error:", e);
       setError(friendlyError(e));
       setPhase("error");
     }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { WorldMap } from "@/src/components/WorldMap";
 import { DonateWidget } from "@/src/components/DonateWidget";
 import { AgentIdentity } from "@/src/components/AgentIdentity";
+import { POOL_ADDRESS } from "@/src/lib/contract";
 import {
   useCivicShield,
   type ProposalRecord,
@@ -11,8 +12,9 @@ import {
   type FailReason,
 } from "@/src/lib/useCivicShield";
 
-// The 5 policy rules, in evaluation order. FailReason maps 1:1 to a rule index.
+// The 6 policy rules, in evaluation order (scope is checked first — donor intent).
 const RULES: { reason: FailReason; label: string }[] = [
+  { reason: "EVENT_SCOPE_MISMATCH", label: "Event scope matches the pool's mandate (region | hazard)" },
   { reason: "RISK_BELOW_THRESHOLD", label: "Risk ≥ threshold (riskScore ≥ 75)" },
   { reason: "AMOUNT_OVER_EVENT_CAP", label: "Amount ≤ per-event cap" },
   { reason: "DAILY_LIMIT_EXCEEDED", label: "Within daily limit (trace-level)" },
@@ -42,10 +44,12 @@ function StatusPill({ status }: { status: Status }) {
     EXECUTED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
     BLOCKED: "bg-rose-50 text-rose-700 ring-rose-600/20",
     PENDING: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    PENDING_REVIEW: "bg-indigo-50 text-indigo-700 ring-indigo-600/20",
   };
+  const text = status === "PENDING_REVIEW" ? "LEDGER REVIEW" : status;
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${styles[status]}`}>
-      {status}
+      {text}
     </span>
   );
 }
@@ -299,7 +303,7 @@ function TransparencyLog({ proposals, executed, blocked }: { proposals: Proposal
 }
 
 function Footer() {
-  const POOL = "0x5e9972027d4f03824ac0e5da446f0afb5bfffcf5";
+  const POOL = POOL_ADDRESS;
   const links: [string, string, string][] = [
     ["CivicShieldPool (Base mainnet)", shortHex(POOL), `https://basescan.org/address/${POOL}`],
     ["Block explorer", "basescan.org", `https://basescan.org/address/${POOL}`],

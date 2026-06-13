@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync:deployment": "cp ../contracts/deployments/base-mainnet.json src/deployments/base-mainnet.json",
+    "predev": "npm run sync:deployment || true",
+    "prebuild": "npm run sync:deployment || true",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
