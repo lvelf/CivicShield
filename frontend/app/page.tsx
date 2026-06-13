@@ -1,34 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import proposalsData from "@/src/mocks/proposals.json";
-
-// ---- types (mirror docs/INTERFACES.md getProposal shape) ----
-
-type FailReason =
-  | "NONE"
-  | "RISK_BELOW_THRESHOLD"
-  | "AMOUNT_OVER_EVENT_CAP"
-  | "DAILY_LIMIT_EXCEEDED"
-  | "RECIPIENT_NOT_VERIFIED"
-  | "PURPOSE_NOT_APPROVED";
-
-type Status = "PENDING" | "EXECUTED" | "BLOCKED";
-
-type ProposalRecord = {
-  id: number;
-  proposal: {
-    recipient: string;
-    recipientAddress: string;
-    amount: string;
-    purpose: string;
-    eventId: string;
-    reasoning: string;
-  };
-  verdict: { status: Status; passed: boolean; failReason: FailReason };
-};
-
-const proposals = proposalsData as ProposalRecord[];
+import {
+  useCivicShield,
+  type ProposalRecord,
+  type Status,
+  type FailReason,
+} from "@/src/lib/useCivicShield";
 
 // The 5 policy rules, in evaluation order. FailReason maps 1:1 to a rule index.
 const RULES: { reason: FailReason; label: string }[] = [
@@ -38,10 +16,6 @@ const RULES: { reason: FailReason; label: string }[] = [
   { reason: "RECIPIENT_NOT_VERIFIED", label: "Recipient in ENS verified allowlist" },
   { reason: "PURPOSE_NOT_APPROVED", label: "Purpose in approved list" },
 ];
-
-// Demo-only figures not present in the mock fixtures.
-// Mainnet, demo-scale: pool ≤ $30, per-event cap 5 USDC, daily cap 15 USDC.
-const DEMO_POOL_BALANCE = "30000000"; // 30 USDC
 
 // ---- helpers ----
 
@@ -66,15 +40,6 @@ function ruleOutcomes(v: ProposalRecord["verdict"]) {
     return { ...r, state: "skip" as const };
   });
 }
-
-// ---- derived stats ----
-
-const executedCount = proposals.filter((p) => p.verdict.passed).length;
-const blockedCount = proposals.length - executedCount;
-const totalReleased = proposals
-  .filter((p) => p.verdict.passed)
-  .reduce((sum, p) => sum + Number(p.proposal.amount), 0)
-  .toString();
 
 // ---- small UI bits ----
 
@@ -123,13 +88,33 @@ function Nav() {
   );
 }
 
-function Hero() {
+function Hero({
+  poolBalance,
+  executed,
+  blocked,
+  totalReleased,
+  isLive,
+}: {
+  poolBalance: string;
+  executed: number;
+  blocked: number;
+  totalReleased: string;
+  isLive: boolean;
+}) {
   const [amount, setAmount] = useState(5);
   const presets = [1, 5, 10];
   return (
     <section className="mx-auto max-w-5xl px-6 pt-16 pb-12">
-      <span className="inline-block rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-        Demo data — reading mock fixtures until the contract is live
+      <span
+        className={`inline-block rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+          isLive
+            ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+            : "bg-amber-50 text-amber-700 ring-amber-600/20"
+        }`}
+      >
+        {isLive
+          ? "Live — reading on-chain state from CivicShieldPool"
+          : "Demo data — reading mock fixtures until the contract is live"}
       </span>
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.3fr_1fr]">
         {/* left: pitch + stats */}
@@ -145,10 +130,10 @@ function Hero() {
             auditable.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Pool balance" value={formatUSDC(DEMO_POOL_BALANCE)} unit="USDC" />
+            <StatCard label="Pool balance" value={formatUSDC(poolBalance)} unit="USDC" />
             <StatCard label="Released" value={formatUSDC(totalReleased)} unit="USDC" accent="text-emerald-700" />
-            <StatCard label="Executed" value={String(executedCount)} accent="text-emerald-700" />
-            <StatCard label="Blocked by policy" value={String(blockedCount)} accent="text-rose-700" />
+            <StatCard label="Executed" value={String(executed)} accent="text-emerald-700" />
+            <StatCard label="Blocked by policy" value={String(blocked)} accent="text-rose-700" />
           </div>
         </div>
 
@@ -348,7 +333,15 @@ function LogCard({ record }: { record: ProposalRecord }) {
   );
 }
 
-function TransparencyLog() {
+function TransparencyLog({
+  proposals,
+  executed,
+  blocked,
+}: {
+  proposals: ProposalRecord[];
+  executed: number;
+  blocked: number;
+}) {
   return (
     <section id="log" className="border-t border-stone-200 bg-white">
       <div className="mx-auto max-w-5xl px-6 py-14">
@@ -361,7 +354,7 @@ function TransparencyLog() {
             </p>
           </div>
           <span className="hidden shrink-0 text-sm text-stone-400 sm:block">
-            {executedCount} released · {blockedCount} blocked
+            {executed} released · {blocked} blocked
           </span>
         </div>
         <div className="mt-8 flex flex-col gap-3">
@@ -407,13 +400,20 @@ function VerifyFooter() {
 // ---- page ----
 
 export default function Home() {
+  const { proposals, poolBalance, executed, blocked, totalReleased, isLive } = useCivicShield();
   return (
     <div className="flex flex-1 flex-col bg-[#fafaf9] text-stone-900">
       <Nav />
-      <Hero />
+      <Hero
+        poolBalance={poolBalance}
+        executed={executed}
+        blocked={blocked}
+        totalReleased={totalReleased}
+        isLive={isLive}
+      />
       <HowItWorks />
       <AgentCard />
-      <TransparencyLog />
+      <TransparencyLog proposals={proposals} executed={executed} blocked={blocked} />
       <VerifyFooter />
     </div>
   );
