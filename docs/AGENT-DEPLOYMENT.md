@@ -81,6 +81,15 @@ daily cap across runs, so frequent cron ticks won't spam `proposeRelease`.
 pm2 start "node --experimental-strip-types src/run.ts" --name cs-agent --cron "*/5 * * * *"
 ```
 
+**Free: GitHub Actions cron** (`.github/workflows/civicshield-agent.yml`). No server, no raw key —
+the agent signs via Privy, so only Privy API creds + OpenAI key go in GitHub repo secrets.
+1. Repo → Settings → Secrets and variables → Actions → add: `OPENAI_API_KEY`, `PRIVY_APP_ID`,
+   `PRIVY_APP_SECRET`, `PRIVY_WALLET_ID`, `PRIVY_WALLET_ADDRESS`.
+2. The workflow file must be on the **default branch** for the schedule to fire (scheduled
+   Actions ignore non-default branches). `workflow_dispatch` gives a manual "Run workflow" button.
+3. Rate-limiter state persists via `actions/cache`. The relayer step is included but commented —
+   enable it only with a **dedicated** relayer key (never the owner key) in secrets.
+
 ## Why a normal server is fine
 The agent is untrusted by design: the on-chain policy (scope, risk, caps, recipient, purpose) and
 the Ledger review gate are the authority. A compromised agent host can only (a) miss a disaster, or
