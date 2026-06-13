@@ -1,0 +1,13 @@
+{
+  "name": "civicshield-relayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Submits CRE-derived hazard riskScore on-chain via CivicShieldPool.submitRiskScore",
+  "scripts": {
+    "submit": "node --experimental-strip-types src/submit.ts"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}

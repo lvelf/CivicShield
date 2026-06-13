@@ -12,7 +12,7 @@ contract CivicShieldPoolTest is Test {
     CivicShieldPool pool;
     MockUSDC usdc;
 
-    event Donated(address indexed from, uint256 amount); // mirror for vm.expectEmit
+    event Donated(address indexed from, uint256 amount, bytes32 indexed scope); // mirror for vm.expectEmit
 
     address owner = address(this);
     address relayer = makeAddr("relayer");
@@ -25,11 +25,16 @@ contract CivicShieldPoolTest is Test {
 
     bytes32 eventFlood = keccak256("nws-alert-flood-001");
     bytes32 eventNoSignal = keccak256("nws-alert-none-002");
+    bytes32 eventWrongScope = keccak256("nws-alert-wildfire-003");
+    bytes32 eventLowRisk = keccak256("nws-alert-flood-low-004"); // in-scope flood, score < threshold
 
     uint8 constant THRESHOLD = 75;
     uint256 constant MAX_PER_EVENT = 500e6; // 500 USDC
     uint256 constant DAILY_LIMIT = 800e6; // 800 USDC
     uint256 constant STD_AMOUNT = 300e6; // 300 USDC
+
+    bytes32 constant SCOPE = keccak256("US|flood"); // this pool's fund scope
+    bytes32 constant WRONG_SCOPE = keccak256("US|wildfire"); // a different hazard
 
     function setUp() public {
         usdc = new MockUSDC();
@@ -45,16 +50,21 @@ contract CivicShieldPoolTest is Test {
         recipients[1] = medical;
 
         pool = new CivicShieldPool(
-            address(usdc), relayer, THRESHOLD, MAX_PER_EVENT, DAILY_LIMIT, purposes, recipients
+            address(usdc), agent, relayer, SCOPE, THRESHOLD, MAX_PER_EVENT, DAILY_LIMIT, purposes, recipients
         );
 
         // Fund the escrow generously so transfers never fail for lack of balance.
         usdc.mint(address(pool), 100_000e6);
 
-        // A qualifying real-world hazard signal exists for the flood event.
-        vm.prank(relayer);
-        pool.submitRiskScore(eventFlood, 82);
-        // eventNoSignal intentionally left at 0.
+        // A qualifying, in-scope real-world hazard signal exists for the flood event.
+        vm.startPrank(relayer);
+        pool.submitRiskScore(eventFlood, 82, SCOPE);
+        // High score but WRONG scope (a wildfire) — must be blocked at the scope rule.
+        pool.submitRiskScore(eventWrongScope, 90, WRONG_SCOPE);
+        // In-scope flood but score below threshold — for the rule-1 test.
+        pool.submitRiskScore(eventLowRisk, 40, SCOPE);
+        vm.stopPrank();
+        // eventNoSignal intentionally left at 0 (no score, no scope).
     }
 
     // --- helpers -------------------------------------------------------------
@@ -97,7 +107,8 @@ contract CivicShieldPoolTest is Test {
     // --- rule 1: risk below threshold (fixture #3) ---------------------------
 
     function test_Block_RiskBelowThreshold() public {
-        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventNoSignal);
+        // in-scope flood (scope passes) but score 40 < 75 -> blocked at rule 1.
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventLowRisk);
         pool.executeRelease(id);
 
         Verdict memory v = _verdict(id);
@@ -177,14 +188,14 @@ contract CivicShieldPoolTest is Test {
     function test_CannotReExecuteSettledProposal() public {
         uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventFlood);
         pool.executeRelease(id);
-        vm.expectRevert(bytes("already settled"));
+        vm.expectRevert(bytes("settled"));
         pool.executeRelease(id);
     }
 
     function test_OnlyRelayerCanSubmitRiskScore() public {
         vm.prank(attacker);
         vm.expectRevert(bytes("not relayer"));
-        pool.submitRiskScore(eventFlood, 100);
+        pool.submitRiskScore(eventFlood, 100, SCOPE);
     }
 
     function test_BlockedProposalEmitsButDoesNotRevert() public {
@@ -213,11 +224,82 @@ contract CivicShieldPoolTest is Test {
         uint256 before = pool.poolBalance();
         vm.startPrank(lifiExecutor);
         usdc.approve(address(pool), 50e6);
-        vm.expectEmit(true, false, false, true, address(pool));
-        emit Donated(realDonor, 50e6); // <-- realDonor, NOT lifiExecutor
+        vm.expectEmit(true, true, false, true, address(pool));
+        emit Donated(realDonor, 50e6, SCOPE); // <-- realDonor, NOT lifiExecutor; tagged with pool scope
         pool.donate(50e6, realDonor);
         vm.stopPrank();
         assertEq(pool.poolBalance() - before, 50e6);
+    }
+
+    // --- rule 0: event scope mismatch (donor-intent enforcement) --------------
+
+    function test_Block_EventScopeMismatch() public {
+        // High score (90) but the event is a wildfire — this is a flood pool. Donor intent holds.
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventWrongScope);
+        pool.executeRelease(id);
+        Verdict memory v = _verdict(id);
+        assertEq(uint256(v.status), uint256(ProposalStatus.BLOCKED));
+        assertEq(uint256(v.failReason), uint256(FailReason.EVENT_SCOPE_MISMATCH));
+        assertEq(usdc.balanceOf(shelter), 0);
+    }
+
+    function test_Block_UnknownEventScope() public {
+        // eventNoSignal has no scope attested (0) — also a scope mismatch (fundScope != 0).
+        uint256 id = _propose(shelter, STD_AMOUNT, "emergency_shelter", eventNoSignal);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).failReason), uint256(FailReason.EVENT_SCOPE_MISMATCH));
+    }
+
+    // --- human-in-the-loop review tier (Ledger) -------------------------------
+
+    function test_LargeRelease_GoesToReview_ThenApproveExecutes() public {
+        pool.setReviewThreshold(200e6); // releases >= 200 USDC need approval
+        uint256 big = 300e6; // within the 500 cap, but over the review threshold
+        uint256 id = _propose(shelter, big, "emergency_shelter", eventFlood);
+
+        // First execute: policy-clean, but held for human review (no transfer).
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.PENDING_REVIEW));
+        assertEq(usdc.balanceOf(shelter), 0);
+
+        // Approver (Ledger) signs off; then it executes.
+        pool.approveRelease(id); // test contract is owner, and approver defaults to owner
+        uint256 balBefore = usdc.balanceOf(shelter);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.EXECUTED));
+        assertEq(usdc.balanceOf(shelter) - balBefore, big);
+    }
+
+    function test_SmallRelease_AutoExecutes_NoReview() public {
+        pool.setReviewThreshold(200e6);
+        uint256 small = 100e6; // below the review threshold
+        uint256 id = _propose(shelter, small, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        assertEq(uint256(_verdict(id).status), uint256(ProposalStatus.EXECUTED));
+    }
+
+    function test_OnlyApproverCanApprove() public {
+        pool.setReviewThreshold(200e6);
+        uint256 id = _propose(shelter, 300e6, "emergency_shelter", eventFlood);
+        pool.executeRelease(id);
+        vm.prank(attacker);
+        vm.expectRevert(bytes("not approver"));
+        pool.approveRelease(id);
+    }
+
+    // --- access control: onlyAgent can propose --------------------------------
+
+    function test_OnlyAgentCanPropose() public {
+        Proposal memory p = Proposal({
+            recipient: shelter,
+            amount: STD_AMOUNT,
+            purpose: pool.purposeHash("emergency_shelter"),
+            eventId: eventFlood,
+            reasoning: "spam"
+        });
+        vm.prank(attacker);
+        vm.expectRevert(bytes("not agent"));
+        pool.proposeRelease(p);
     }
 
     function test_Donate_RejectsZeroDonor() public {
