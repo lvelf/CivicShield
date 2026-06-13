@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  /* Light theme only — disaster relief reads as warmth + clarity, not a dark terminal. */
+  --background: #fafaf9;
+  --foreground: #1c1917;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-fraunces);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* editorial serif display — Ghost-Reviews-style headlines */
+.font-serif {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+}
+
+/* flowing fund-flow arcs on the world map */
+@keyframes flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.arc-flow {
+  stroke-dasharray: 3 5;
+  animation: flow 1.2s linear infinite;
+}
+.arc-flow-out {
+  stroke-dasharray: 3 4;
+  animation: flow 0.9s linear infinite;
+}
