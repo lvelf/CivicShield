@@ -16,7 +16,8 @@ imminent, observed flooding. Minor/advisory-level events should NOT act. Your de
 a proposal; an on-chain policy makes the final call, so never assume your output releases funds.`
 
 export async function assess(alert: CapAlert, deterministicScore: number): Promise<Assessment> {
-	const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+	// .trim(): GitHub/CI secrets often carry a trailing newline, which is an illegal HTTP header value.
+	const client = new OpenAI({ apiKey: (process.env.OPENAI_API_KEY ?? '').trim() })
 
 	const completion = await client.chat.completions.create({
 		model: MODEL,

@@ -24,7 +24,7 @@ export interface Signer {
 function req(name: string): string {
 	const v = process.env[name]
 	if (!v) throw new Error(`missing env ${name}`)
-	return v
+	return v.trim() // CI secrets often carry a trailing newline; trim so creds/headers stay valid
 }
 
 async function chainOf(rpc: string) {
