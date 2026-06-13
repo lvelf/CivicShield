@@ -38,3 +38,6 @@ cre/.cre/
 # Frontend
 .next/
 .vercel/
+
+# Agent runtime state (rate-limit bookkeeping)
+agent/.agent-state.json

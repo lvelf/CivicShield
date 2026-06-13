@@ -1,7 +1,8 @@
 // Submits a proposal on-chain via CivicShieldPool.proposeRelease (onlyAgent). This is the ONLY
 // on-chain power the agent has — it cannot move funds; executeRelease + policy decide that.
-import { createPublicClient, createWalletClient, http, keccak256, parseEventLogs, toBytes, type Hex } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+// Signing goes through the Signer abstraction (local key / Privy Agent Wallet / Dynamic).
+import { createPublicClient, encodeFunctionData, http, keccak256, parseEventLogs, toBytes, type Hex } from 'viem'
+import { createSigner } from './signer.ts'
 import type { DraftProposal } from './types.ts'
 
 const POOL_ABI = [
@@ -46,30 +47,21 @@ export function eventIdOf(alertId: string): Hex {
 }
 
 export async function submitProposal(p: DraftProposal): Promise<{ hash: Hex; id: bigint }> {
-	const pk = process.env.PRIVATE_KEY as Hex | undefined
-	if (!pk) throw new Error('set PRIVATE_KEY (agent key — must equal the pool.agent)')
 	const rpc = process.env.RPC_URL ?? 'https://mainnet.base.org'
 	const pool = (process.env.POOL_ADDRESS ?? '0x8df17313f37f5418868f1c3c369bbde4dba9daa6') as Hex
 
-	const account = privateKeyToAccount(pk)
-	const pub = createPublicClient({ transport: http(rpc) })
-	const chainId = await pub.getChainId()
-	const chain = {
-		id: chainId,
-		name: `chain-${chainId}`,
-		nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-		rpcUrls: { default: { http: [rpc] } },
-	} as const
-	const wallet = createWalletClient({ account, chain, transport: http(rpc) })
+	// agent role -> Privy by default in prod; local for dev. Set AGENT_SIGNER=local|privy|dynamic.
+	const signer = await createSigner(process.env.AGENT_SIGNER ?? 'local', rpc)
 
-	const hash = await wallet.writeContract({
-		address: pool,
+	const data = encodeFunctionData({
 		abi: POOL_ABI,
 		functionName: 'proposeRelease',
 		args: [{ recipient: p.recipient, amount: p.amount, purpose: purposeHash(p.purpose), eventId: p.eventId, reasoning: p.reasoning }],
 	})
+	const hash = await signer.sendTransaction({ to: pool, data })
+
+	const pub = createPublicClient({ transport: http(rpc) })
 	const receipt = await pub.waitForTransactionReceipt({ hash })
-	// Read the id from the ProposalCreated event — robust against RPC read-after-write lag.
 	const logs = parseEventLogs({ abi: POOL_ABI, eventName: 'ProposalCreated', logs: receipt.logs })
 	const id = (logs[0]?.args as { id: bigint } | undefined)?.id ?? 0n
 	return { hash, id }
