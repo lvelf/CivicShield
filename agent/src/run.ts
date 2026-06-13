@@ -7,9 +7,11 @@
 import { monitorScope } from './supervisor.ts'
 import { assess } from './assessor.ts'
 import { submitProposal, eventIdOf } from './propose.ts'
+import { checkRateLimit, recordProposal } from './ratelimit.ts'
 import type { DraftProposal } from './types.ts'
 
 const AREA = process.env.AREA ?? 'IL'
+const SCOPE = process.env.FUND_SCOPE ?? 'US|flood'
 const RECIPIENT = (process.env.VERIFIED_RECIPIENT ?? '0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA') as `0x${string}`
 
 async function main() {
@@ -30,6 +32,13 @@ async function main() {
 		return
 	}
 
+	// Rate limit: don't spam proposeRelease (dedupe events, per-scope cooldown, daily cap).
+	const rl = checkRateLimit(SCOPE, candidate.alert.id)
+	if (!rl.allowed) {
+		console.log(`[ratelimit] skipping propose: ${rl.reason}`)
+		return
+	}
+
 	const draft: DraftProposal = {
 		recipient: RECIPIENT,
 		amount: BigInt(a.amountUSDC) * 1_000_000n, // USDC 6 dp
@@ -39,6 +48,7 @@ async function main() {
 	}
 	console.log(`[propose] submitting proposeRelease: ${a.amountUSDC} USDC -> ${RECIPIENT}, eventId=${draft.eventId}`)
 	const { hash, id } = await submitProposal(draft)
+	recordProposal(SCOPE, candidate.alert.id)
 	console.log(`[propose] proposal #${id} created. tx=${hash}`)
 	console.log('Next: anyone can executeRelease(id); the policy (scope/risk/caps/recipient/purpose) decides.')
 }

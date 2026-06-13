@@ -1,0 +1,78 @@
+name: CivicShield agent
+
+# Free hosting for the proposer agent: runs on a schedule + on-demand. No raw private key needed —
+# signing goes through the Privy Agent Wallet (only Privy API creds live in GitHub secrets).
+on:
+  schedule:
+    - cron: '*/30 * * * *' # every 30 min (GitHub may delay/skip under load; runs from DEFAULT branch only)
+  workflow_dispatch: {} # manual "Run workflow" button (works from any branch)
+
+concurrency:
+  group: civicshield-agent
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # needed for --experimental-strip-types
+
+      - name: Install agent deps
+        working-directory: agent
+        run: bun install
+
+      # Persist the rate-limiter state (dedupe / cooldown / daily cap) across ephemeral runs.
+      - name: Restore agent state
+        uses: actions/cache@v4
+        with:
+          path: agent/.agent-state.json
+          key: agent-state-${{ github.run_id }}
+          restore-keys: |
+            agent-state-
+
+      - name: Supervise -> assess (OpenAI) -> propose (Privy-signed)
+        working-directory: agent
+        env:
+          AGENT_SIGNER: privy
+          RPC_URL: https://mainnet.base.org
+          POOL_ADDRESS: '0x8df17313f37f5418868f1c3c369bbde4dba9daa6'
+          AREA: IL
+          FUND_SCOPE: 'US|flood'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_WALLET_ID: ${{ secrets.PRIVY_WALLET_ID }}
+          PRIVY_WALLET_ADDRESS: ${{ secrets.PRIVY_WALLET_ADDRESS }}
+        run: node --experimental-strip-types src/run.ts
+
+  # --- OPTIONAL: also run the relayer (submits CRE score+scope) on cron ---------
+  # The relayer signs submitRiskScore. To enable, uncomment and add a DEDICATED relayer key
+  # as the RELAYER_PRIVATE_KEY secret (do NOT use the owner key). Then setRelayer(thatAddress).
+  #
+  # relay:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: oven-sh/setup-bun@v2
+  #     - uses: actions/setup-node@v4
+  #       with: { node-version: '22' }
+  #     - name: Install agent deps (signer lives in agent/)
+  #       working-directory: agent
+  #       run: bun install
+  #     - name: Install relayer deps
+  #       working-directory: relayer
+  #       run: bun install
+  #     - name: Submit CRE score + scope
+  #       working-directory: relayer
+  #       env:
+  #         RELAYER_SIGNER: local
+  #         PRIVATE_KEY: ${{ secrets.RELAYER_PRIVATE_KEY }}
+  #         RPC_URL: https://mainnet.base.org
+  #         POOL_ADDRESS: '0x8df17313f37f5418868f1c3c369bbde4dba9daa6'
+  #         AREA: IL
+  #       run: node --experimental-strip-types src/submit.ts

@@ -8,7 +8,9 @@ export const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
   connectors: [injected()],
   transports: {
-    [base.id]: http("https://mainnet.base.org"),
+    // publicnode is more reliable than the default mainnet.base.org (which rate-limits /
+    // serves stale load-balanced nodes — surfaced as flaky log/balance reads).
+    [base.id]: http("https://base.publicnode.com"),
     [baseSepolia.id]: http("https://sepolia.base.org"),
   },
   ssr: true,

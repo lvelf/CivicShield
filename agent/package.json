@@ -8,6 +8,7 @@
     "run": "node --experimental-strip-types src/run.ts"
   },
   "dependencies": {
+    "@privy-io/server-auth": "^1.32.5",
     "openai": "^4.67.0",
     "viem": "^2.21.0"
   }
