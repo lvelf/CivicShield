@@ -14,9 +14,11 @@ skip = ["lib/openzeppelin-contracts/fv/**", "lib/openzeppelin-contracts/certora/
 
 [rpc_endpoints]
 base_sepolia = "https://sepolia.base.org"
+base_mainnet = "https://mainnet.base.org"
 optimism_sepolia = "https://sepolia.optimism.io"
 arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
 sepolia = "https://ethereum-sepolia-rpc.publicnode.com"
+arc_testnet = "https://rpc.testnet.arc.network"
 
 [etherscan]
 base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api", chain = 84532 }

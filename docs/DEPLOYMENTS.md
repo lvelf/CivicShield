@@ -1,5 +1,47 @@
 # Deployments
 
+## Base Mainnet (chain 8453) — MAIN LINE (LI.FI Composer + CRE + ENS)
+
+The coherent product. LI.FI Composer's destination-deposit feature is **mainnet-only** (no
+testnet, and not Arc), so the donation→certify→release flow lives here on real (tiny) money.
+
+| Contract | Address |
+|---|---|
+| `CivicShieldPool` | [`0x5e9972027d4f03824ac0e5da446f0afb5bfffcf5`](https://basescan.org/address/0x5e9972027d4f03824ac0e5da446f0afb5bfffcf5) |
+| Real Circle USDC (6 dp) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+
+- **Owner / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`
+- **Policy:** riskThreshold 75 · maxReleasePerEvent 500 USDC · dailyReleaseLimit 1000 USDC
+- **Full coherent flow proven live on mainnet:**
+  1. **LI.FI Composer donation** — swap ETH → USDC + `donate()` into the pool in one Flow
+     ([tx 0x75ed2d4d…](https://basescan.org/tx/0x75ed2d4daedaffaf3fd61882933c855042b53ae3c2caf01b7dcebda7ad8d63f6));
+     1 USDC landed via LI.FI executor `0x4DaC9d17…`.
+  2. relayer submitted riskScore 82.
+  3. **Blocked**: 0.5 USDC to unverified `0x…dEaD` → `BLOCKED / RECIPIENT_NOT_VERIFIED`, pool unchanged.
+  4. **Released**: 0.5 USDC to verified recipient → `EXECUTED`, pool 1.0 → 0.5 USDC.
+- LI.FI Composer `contractCalls` confirmed routable to Base mainnet (and to Arc only as a plain
+  bridge, not a deposit) — see [lifi-composer-findings.md](./lifi-composer-findings.md).
+
+## Arc Testnet (chain 5042002) — BONUS (Circle/Arc conditional-escrow prize)
+
+Circle's Arc L1. **Native gas token is USDC** (6 dp). The pool holds real Circle testnet USDC
+(`0x3600…`, a standard ERC-20), so this satisfies the Arc "advanced stablecoin logic /
+conditional escrow" bounty directly. LI.FI routes **Arbitrum Sepolia → Arc** (LI.FI Intents),
+so a donor on Arbitrum Sepolia funds the Arc pool via Composer in one Flow.
+
+| Contract | Address |
+|---|---|
+| `CivicShieldPool` | [`0x5E9972027d4f03824AC0e5dA446f0AfB5BFfFcf5`](https://testnet.arcscan.app/address/0x5E9972027d4f03824AC0e5dA446f0AfB5BFfFcf5) |
+| Real Circle USDC (gas + escrow token, 6 dp) | `0x3600000000000000000000000000000000000000` |
+
+- **Owner / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`
+- **Policy:** riskThreshold 75 · maxReleasePerEvent 500 USDC · dailyReleaseLimit 1000 USDC
+- RPC `https://rpc.testnet.arc.network` · explorer `testnet.arcscan.app` · faucet `faucet.circle.com`
+- **Verified live with REAL USDC:** funded pool 5 USDC → released 2 USDC to verified recipient
+  (`EXECUTED`); blocked 2 USDC to unverified `0x…dEaD` (`BLOCKED / RECIPIENT_NOT_VERIFIED`), pool unchanged.
+
+
+
 ## Ethereum Sepolia (chain 11155111) — first bring-up
 
 Deployed to Ethereum Sepolia (not Base) to unblock end-to-end testing: Base Sepolia's
