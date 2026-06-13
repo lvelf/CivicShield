@@ -1,6 +1,6 @@
 {
   "schedule": "0 */5 * * * *",
-  "url": "https://api.weather.gov/alerts/active?area=NY",
+  "url": "https://api.weather.gov/alerts/active?area=IL&event=Flood%20Warning",
   "userAgent": "CivicShield/1.0 (ETHGlobal hackathon; nuo.rosemary@gmail.com)",
   "riskThreshold": 75
 }

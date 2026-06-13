@@ -7,26 +7,26 @@ testnet, and not Arc), so the donation→certify→release flow lives here on re
 
 | Contract | Address |
 |---|---|
-| `CivicShieldPool` (current) | [`0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7`](https://basescan.org/address/0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7) |
+| `CivicShieldPool` (current) | [`0xc8f383373b05243419281c5073c1bc39f4d9c7f4`](https://basescan.org/address/0xc8f383373b05243419281c5073c1bc39f4d9c7f4) |
 | Real Circle USDC (6 dp) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
 ABI + address for the frontend: `contracts/deployments/base-mainnet.json`.
 
-- **Owner / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`
-- **Policy:** riskThreshold 75 · maxReleasePerEvent 500 USDC · dailyReleaseLimit 1000 USDC
-- **`donate(uint256 amount, address donor)`** — `donor` is recorded in the Transparency Log, NOT
-  `msg.sender`. On a LI.FI Composer deposit, msg.sender is LI.FI's executor (`0x4DaC9d17…`); the
-  frontend must encode the connected wallet as `donor` in the contract-call calldata.
-- **Composer link proven** on the predecessor pool `0x5e99…fcf5`
-  ([tx 0x75ed2d4d…](https://basescan.org/tx/0x75ed2d4daedaffaf3fd61882933c855042b53ae3c2caf01b7dcebda7ad8d63f6)):
-  swap ETH→USDC + `donate()` in one Flow, 1 USDC landed; then blocked an unverified release
-  (`RECIPIENT_NOT_VERIFIED`) and executed a verified one. Re-run on the current pool after the
-  donate-signature fix.
+- **Owner / Agent / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`
+- **fundScope:** `keccak256("US|flood")` — all-US flood relief. Donor intent enforced on-chain.
+- **Policy:** scope match (rule 0) · riskThreshold 75 · maxReleasePerEvent 500 USDC · dailyReleaseLimit 1000 USDC · verified recipient · approved purpose
+- **`proposeRelease` is onlyAgent** (prevents proposal-list spam/DoS); `executeRelease` stays permissionless.
+- **`donate(uint256 amount, address donor)`** — `donor` (not msg.sender) is logged; on a LI.FI
+  Composer deposit msg.sender is LI.FI's executor (`0x4DaC9d17…`), so the frontend encodes the
+  connected wallet as `donor`. `Donated` also carries the pool's scope.
+- **`submitRiskScore(eventId, score, eventScope)`** — relayer attests score AND scope; the agent
+  cannot claim an event is in-scope. Mismatch → `EVENT_SCOPE_MISMATCH`.
 - LI.FI Composer `contractCalls` confirmed routable to Base mainnet (and to Arc only as a plain
-  bridge, not a deposit) — see [lifi-composer-findings.md](./lifi-composer-findings.md).
+  bridge, not a deposit) — see [lifi-composer-findings.md](./lifi-composer-findings.md). Composer
+  link proven live on an earlier pool (tx 0x75ed2d4d…); re-run on the current pool for a clean log.
 
-> **Predecessor (pre donor-fix):** `0x5e9972027d4f03824ac0e5da446f0afb5bfffcf5` — old
-> `donate(uint256)` credited msg.sender (the LI.FI executor) in the log. Replaced.
+> **Predecessors:** `0x5e99…fcf5` (pre donor-fix), `0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7`
+> (pre scope/onlyAgent). Both superseded by the current address above.
 
 ## Arc Testnet (chain 5042002) — BONUS (Circle/Arc conditional-escrow prize)
 
@@ -37,7 +37,7 @@ so a donor on Arbitrum Sepolia funds the Arc pool via Composer in one Flow.
 
 | Contract | Address |
 |---|---|
-| `CivicShieldPool` | [`0xc8f383373b05243419281c5073c1bc39f4d9c7f4`](https://testnet.arcscan.app/address/0xc8f383373b05243419281c5073c1bc39f4d9c7f4) |
+| `CivicShieldPool` | [`0x18df0335e1355135339532ccd718aee27cfa5581`](https://testnet.arcscan.app/address/0x18df0335e1355135339532ccd718aee27cfa5581) |
 | Real Circle USDC (gas + escrow token, 6 dp) | `0x3600000000000000000000000000000000000000` |
 
 - **Owner / Relayer / seed verified recipient:** `0xFeeA88FB58342479fc8D5901f3f67740b39c9FaA`

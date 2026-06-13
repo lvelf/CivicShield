@@ -21,6 +21,7 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
 
     // ---- immutable wiring ----
     IERC20 public immutable usdc;
+    bytes32 public immutable fundScope; // this pool's scope, e.g. keccak256("US|flood"). Donor intent.
 
     // ---- policy Pi ----
     uint8 public riskThreshold; // rule 1: riskScore must be >= this
@@ -35,6 +36,7 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
 
     // ---- state ----
     mapping(bytes32 => uint8) private _riskScore; // eventId => score (0..100)
+    mapping(bytes32 => bytes32) private _eventScope; // eventId => scope (relayer-attested; NOT agent-claimed)
     Proposal[] private _proposals;
     mapping(uint256 => Verdict) private _verdicts;
 
@@ -46,9 +48,16 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         _;
     }
 
+    modifier onlyAgent() {
+        require(msg.sender == agent, "not agent");
+        _;
+    }
+
     constructor(
         address _usdc,
+        address _agent,
         address _relayer,
+        bytes32 _fundScope,
         uint8 _riskThreshold,
         uint256 _maxReleasePerEvent,
         uint256 _dailyReleaseLimit,
@@ -56,8 +65,11 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         address[] memory _verifiedRecipients
     ) Ownable(msg.sender) {
         require(_usdc != address(0), "usdc=0");
+        require(_fundScope != bytes32(0), "scope=0");
         usdc = IERC20(_usdc);
+        agent = _agent;
         relayer = _relayer;
+        fundScope = _fundScope;
         riskThreshold = _riskThreshold;
         maxReleasePerEvent = _maxReleasePerEvent;
         dailyReleaseLimit = _dailyReleaseLimit;
@@ -74,9 +86,11 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
     // ---------------------------------------------------------------------
 
     /// @inheritdoc ICivicShieldPool
-    /// @dev Permissionless on purpose: anyone (including a manipulated agent or an attacker) may
-    ///      propose. Safety lives at executeRelease, not here — "generation is not permission".
-    function proposeRelease(Proposal calldata p) external returns (uint256 id) {
+    /// @dev onlyAgent: only the designated agent can enqueue a formal proposal, preventing
+    ///      spam/DoS of the proposal list. This still fits "generation is not permission" — the
+    ///      agent (even when manipulated by a prompt-injection) can propose, but executeRelease,
+    ///      not the agent, decides. Public hazard tips go through the off-chain agent, not here.
+    function proposeRelease(Proposal calldata p) external onlyAgent returns (uint256 id) {
         id = _proposals.length;
         _proposals.push(p);
         _verdicts[id] = Verdict({status: ProposalStatus.PENDING, passed: false, failReason: FailReason.NONE});
@@ -113,10 +127,14 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
     }
 
     /// @inheritdoc ICivicShieldPool
-    function submitRiskScore(bytes32 eventId, uint8 score) external onlyRelayer {
+    /// @dev The relayer attests BOTH the score and the event's scope (region|hazard, derived from
+    ///      the source alert). Scope comes from this trusted oracle path — never from the agent's
+    ///      proposal — so the agent cannot fake "this is an in-scope event".
+    function submitRiskScore(bytes32 eventId, uint8 score, bytes32 eventScope) external onlyRelayer {
         require(score <= 100, "score>100");
         _riskScore[eventId] = score;
-        emit RiskScoreSubmitted(eventId, score);
+        _eventScope[eventId] = eventScope;
+        emit RiskScoreSubmitted(eventId, score, eventScope);
     }
 
     /// @inheritdoc ICivicShieldPool
@@ -130,7 +148,7 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
         require(amount > 0, "amount=0");
         require(donor != address(0), "donor=0");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
-        emit Donated(donor, amount);
+        emit Donated(donor, amount, fundScope);
     }
 
     // ---------------------------------------------------------------------
@@ -138,6 +156,9 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
     // ---------------------------------------------------------------------
 
     function _evaluate(Proposal storage p) internal view returns (FailReason) {
+        // rule 0 (donor intent): the event's relayer-attested scope must match this pool's scope.
+        // Blocks spending NY-flood donations on a Florida hurricane, etc.
+        if (_eventScope[p.eventId] != fundScope) return FailReason.EVENT_SCOPE_MISMATCH;
         // rule 1: real-world hazard signal must clear the threshold
         if (_riskScore[p.eventId] < riskThreshold) return FailReason.RISK_BELOW_THRESHOLD;
         // rule 2: per-event cap
@@ -229,6 +250,10 @@ contract CivicShieldPool is ICivicShieldPool, Ownable {
 
     function riskScoreOf(bytes32 eventId) external view returns (uint8) {
         return _riskScore[eventId];
+    }
+
+    function eventScopeOf(bytes32 eventId) external view returns (bytes32) {
+        return _eventScope[eventId];
     }
 
     function releasedToday() external view returns (uint256) {

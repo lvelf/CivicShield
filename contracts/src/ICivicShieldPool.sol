@@ -16,7 +16,8 @@ enum FailReason {
     AMOUNT_OVER_EVENT_CAP, // 2
     DAILY_LIMIT_EXCEEDED, // 3
     RECIPIENT_NOT_VERIFIED, // 4
-    PURPOSE_NOT_APPROVED // 5
+    PURPOSE_NOT_APPROVED, // 5
+    EVENT_SCOPE_MISMATCH // 6 — event's scope (region|hazard) != this pool's fundScope (donor intent)
 
 }
 
@@ -39,7 +40,8 @@ struct Verdict {
 interface ICivicShieldPool {
     // ---- writes ----
 
-    /// @notice Agent submits a structured proposal. Does NOT move funds.
+    /// @notice Agent submits a structured proposal (onlyAgent — prevents proposal-list spam/DoS).
+    ///         Does NOT move funds.
     /// @return id The proposal id (also emitted in ProposalCreated).
     function proposeRelease(Proposal calldata p) external returns (uint256 id);
 
@@ -48,8 +50,9 @@ interface ICivicShieldPool {
     ///         MUST NOT revert on a policy failure — it records the block on-chain.
     function executeRelease(uint256 id) external;
 
-    /// @notice Relayer delivers the CRE-derived risk score for a hazard event.
-    function submitRiskScore(bytes32 eventId, uint8 score) external;
+    /// @notice Relayer delivers the CRE-derived risk score AND the event's attested scope
+    ///         (region|hazard). Scope comes from this trusted path, never from the agent's proposal.
+    function submitRiskScore(bytes32 eventId, uint8 score, bytes32 eventScope) external;
 
     /// @notice Deposit USDC into the escrow pool (LI.FI Composer destination).
     /// @param amount USDC (base units) pulled from msg.sender via transferFrom.
@@ -72,6 +75,8 @@ interface ICivicShieldPool {
     function isApprovedPurpose(bytes32 purpose) external view returns (bool);
 
     function riskScoreOf(bytes32 eventId) external view returns (uint8);
+    function eventScopeOf(bytes32 eventId) external view returns (bytes32);
+    function fundScope() external view returns (bytes32);
     function releasedToday() external view returns (uint256); // trace-level running total
     function poolBalance() external view returns (uint256);
 
@@ -87,6 +92,6 @@ interface ICivicShieldPool {
         uint256 indexed id, address indexed recipient, uint256 amount, bytes32 purpose, bool passed, FailReason failReason
     );
 
-    event RiskScoreSubmitted(bytes32 indexed eventId, uint8 score);
-    event Donated(address indexed from, uint256 amount);
+    event RiskScoreSubmitted(bytes32 indexed eventId, uint8 score, bytes32 indexed eventScope);
+    event Donated(address indexed from, uint256 amount, bytes32 indexed scope);
 }

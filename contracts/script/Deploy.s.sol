@@ -21,12 +21,15 @@ contract Deploy is Script {
     uint256 constant MAX_RELEASE_PER_EVENT = 500e6; // 500 USDC per proposal
     uint256 constant DAILY_RELEASE_LIMIT = 1000e6; // 1000 USDC per UTC day (trace-level)
     uint256 constant MOCK_POOL_FUNDING = 100_000e6; // USDC minted to the pool in mock mode
+    bytes32 constant FUND_SCOPE = keccak256("US|flood"); // this deployment: all-US flood relief
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
         bool useMock = vm.envOr("USE_MOCK_USDC", false);
 
+        // Agent (proposes) and relayer (attests scores+scope) default to the deployer for bring-up.
+        address agent = vm.envOr("AGENT_ADDRESS", deployer);
         address relayer = vm.envOr("RELAYER_ADDRESS", deployer);
         string[] memory purposes = _purposes();
         address[] memory recipients = new address[](1);
@@ -43,7 +46,7 @@ contract Deploy is Script {
         }
 
         CivicShieldPool pool = new CivicShieldPool(
-            usdc, relayer, RISK_THRESHOLD, MAX_RELEASE_PER_EVENT, DAILY_RELEASE_LIMIT, purposes, recipients
+            usdc, agent, relayer, FUND_SCOPE, RISK_THRESHOLD, MAX_RELEASE_PER_EVENT, DAILY_RELEASE_LIMIT, purposes, recipients
         );
 
         if (useMock) {
@@ -57,6 +60,7 @@ contract Deploy is Script {
         console.log("Deployer:        ", deployer);
         console.log("Mock USDC mode:  ", useMock);
         console.log("USDC:            ", usdc);
+        console.log("Agent:           ", agent);
         console.log("Relayer:         ", relayer);
         console.log("Seed recipient:  ", recipients[0]);
         console.log("CivicShieldPool: ", address(pool));

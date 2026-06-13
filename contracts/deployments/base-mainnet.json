@@ -1,7 +1,7 @@
 {
   "chainId": 8453,
   "network": "base-mainnet",
-  "CivicShieldPool": "0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7",
+  "CivicShieldPool": "0xc8f383373b05243419281c5073c1bc39f4d9c7f4",
   "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "abi": [
     {
@@ -13,9 +13,19 @@
           "internalType": "address"
         },
         {
+          "name": "_agent",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
           "name": "_relayer",
           "type": "address",
           "internalType": "address"
+        },
+        {
+          "name": "_fundScope",
+          "type": "bytes32",
+          "internalType": "bytes32"
         },
         {
           "name": "_riskThreshold",
@@ -123,6 +133,25 @@
     },
     {
       "type": "function",
+      "name": "eventScopeOf",
+      "inputs": [
+        {
+          "name": "eventId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "executeRelease",
       "inputs": [
         {
@@ -133,6 +162,19 @@
       ],
       "outputs": [],
       "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "fundScope",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
     },
     {
       "type": "function",
@@ -538,6 +580,11 @@
           "name": "score",
           "type": "uint8",
           "internalType": "uint8"
+        },
+        {
+          "name": "eventScope",
+          "type": "bytes32",
+          "internalType": "bytes32"
         }
       ],
       "outputs": [],
@@ -646,6 +693,12 @@
           "type": "uint256",
           "indexed": false,
           "internalType": "uint256"
+        },
+        {
+          "name": "scope",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
         }
       ],
       "anonymous": false
@@ -721,6 +774,12 @@
           "type": "uint8",
           "indexed": false,
           "internalType": "uint8"
+        },
+        {
+          "name": "eventScope",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
         }
       ],
       "anonymous": false
