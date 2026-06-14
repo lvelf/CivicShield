@@ -9,8 +9,7 @@
 //   npm run approve -- <id>      -> sign + broadcast approveRelease(<id>) from the Ledger
 //
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   DeviceActionStatus,
   DeviceStatus,
@@ -27,11 +26,10 @@ import {
   type Hex,
 } from "viem";
 import { base } from "viem/chains";
-import { dmk } from "./dmk.js";
+import { dmk } from "./dmk";
 
-const __dir = dirname(fileURLToPath(import.meta.url));
 const DEPLOYMENT = JSON.parse(
-  readFileSync(resolve(__dir, "../../contracts/deployments/base-mainnet.json"), "utf8"),
+  readFileSync(resolve(__dirname, "../../contracts/deployments/base-mainnet.json"), "utf8"),
 ) as { CivicShieldPool: `0x${string}`; chainId: number };
 
 const POOL = DEPLOYMENT.CivicShieldPool;

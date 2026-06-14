@@ -1,0 +1,4 @@
+.build/
+.speculos-seed.txt
+.speculos/
+node_modules/

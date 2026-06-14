@@ -2,12 +2,11 @@
   "name": "civicshield-ledger",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "Ledger human-in-the-loop approval for CivicShield large releases (DMK + Ethereum signer).",
   "scripts": {
-    "address": "tsx src/approve-release.ts --address",
-    "approve": "tsx src/approve-release.ts",
-    "speculos": "docker run --rm -it -p 5000:5000 -v $PWD/.speculos:/speculos/apps ghcr.io/ledgerhq/speculos --model nanosp --api-port 5000 /speculos/apps/ethereum.elf"
+    "address": "SPECULOS_URL=http://localhost:5001 tsx src/approve-release.ts --address",
+    "approve": "SPECULOS_URL=http://localhost:5001 tsx src/approve-release.ts",
+    "speculos": "docker run --rm -it --name civicshield-speculos -p 5001:5000 -v $PWD/.speculos:/speculos/apps ghcr.io/ledgerhq/speculos --model nanosp --display headless --api-port 5000 --seed \"$(cat .speculos-seed.txt)\" /speculos/apps/ethereum.elf"
   },
   "dependencies": {
     "@ledgerhq/device-management-kit": "^1.5.1",

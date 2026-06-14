@@ -20,8 +20,11 @@ arbitrum_sepolia = "https://sepolia-rollup.arbitrum.io/rpc"
 sepolia = "https://ethereum-sepolia-rpc.publicnode.com"
 arc_testnet = "https://rpc.testnet.arc.network"
 
+# Etherscan V2 (one unified key works across chains; the legacy per-chain V1 endpoints are
+# deprecated). foundry >= 1.7 resolves the V2 endpoint from `chain` automatically — no url needed.
 [etherscan]
-base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api", chain = 84532 }
+base = { key = "${BASESCAN_API_KEY}", chain = 8453 }
+base_sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532 }
 
 [fmt]
 line_length = 120
