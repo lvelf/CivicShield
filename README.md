@@ -41,7 +41,7 @@ For a normal DeFi agent, risk is the brake. For a relief fund, **disaster risk i
 
 ## Architecture
 
-![CivicShield architecture flow](docs/architecture.png)
+![civicshield_architecture_v2](/Users/rosemary/Downloads/civicshield_architecture_v2.png)
 
 ```
   DONATION INTAKE                          HAZARD ORACLE (trust-minimized)
