@@ -1,0 +1,65 @@
+{
+  "$schema": "https://github.com/LedgerHQ/clear-signing-erc7730-registry/raw/master/specs/erc7730-v1.schema.json",
+  "context": {
+    "$id": "CivicShieldPool",
+    "contract": {
+      "deployments": [
+        { "chainId": 8453, "address": "0x8df17313f37f5418868f1c3c369bbde4dba9daa6" }
+      ],
+      "abi": [
+        { "type": "function", "name": "approveRelease", "stateMutability": "nonpayable", "inputs": [{ "name": "id", "type": "uint256" }], "outputs": [] },
+        { "type": "function", "name": "executeRelease", "stateMutability": "nonpayable", "inputs": [{ "name": "id", "type": "uint256" }], "outputs": [] },
+        { "type": "function", "name": "setApprover", "stateMutability": "nonpayable", "inputs": [{ "name": "_approver", "type": "address" }], "outputs": [] },
+        { "type": "function", "name": "setReviewThreshold", "stateMutability": "nonpayable", "inputs": [{ "name": "_reviewThreshold", "type": "uint256" }], "outputs": [] }
+      ]
+    }
+  },
+  "metadata": {
+    "owner": "CivicShield",
+    "info": {
+      "legalName": "CivicShield",
+      "url": "https://github.com/lvelf/CivicShield"
+    },
+    "enums": {}
+  },
+  "display": {
+    "formats": {
+      "approveRelease(uint256)": {
+        "$id": "approveRelease",
+        "intent": "Approve disaster-relief release",
+        "fields": [
+          { "path": "id", "label": "Proposal #", "format": "raw" }
+        ],
+        "required": ["id"],
+        "excluded": []
+      },
+      "executeRelease(uint256)": {
+        "$id": "executeRelease",
+        "intent": "Execute approved relief release",
+        "fields": [
+          { "path": "id", "label": "Proposal #", "format": "raw" }
+        ],
+        "required": ["id"],
+        "excluded": []
+      },
+      "setApprover(address)": {
+        "$id": "setApprover",
+        "intent": "Set the Ledger approver",
+        "fields": [
+          { "path": "_approver", "label": "New approver", "format": "addressName", "params": { "types": ["eoa"] } }
+        ],
+        "required": ["_approver"],
+        "excluded": []
+      },
+      "setReviewThreshold(uint256)": {
+        "$id": "setReviewThreshold",
+        "intent": "Set human-review threshold (USDC base units)",
+        "fields": [
+          { "path": "_reviewThreshold", "label": "Review threshold", "format": "tokenAmount", "params": { "tokenPath": "@.to", "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "decimals": 6, "ticker": "USDC" } }
+        ],
+        "required": ["_reviewThreshold"],
+        "excluded": []
+      }
+    }
+  }
+}

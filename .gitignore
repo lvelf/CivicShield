@@ -41,3 +41,6 @@ cre/.cre/
 
 # Agent runtime state (rate-limit bookkeeping)
 agent/.agent-state.json
+
+# Ledger build dependencies and generated artifacts
+ledger/.build/
