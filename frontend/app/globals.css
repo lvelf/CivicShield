@@ -39,3 +39,16 @@ body {
   stroke-dasharray: 3 4;
   animation: flow 0.9s linear infinite;
 }
+
+/* scroll-reveal — fade + slide-up as a section enters the viewport (one piece at a time) */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}

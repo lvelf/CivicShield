@@ -1,235 +1,357 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useCivicShield, type ProposalRecord } from "@/src/lib/useCivicShield";
-import { StatusPill, formatUSDC, shortHex } from "@/src/components/TransparencyLog";
-import { POOL_ADDRESS, USDC_ADDRESS, POOL_DEPLOY_BLOCK, IS_LIVE } from "@/src/lib/contract";
+import { useEffect, useState, type ReactNode } from "react";
+import Reveal from "@/src/components/Reveal";
+import { useCivicShield } from "@/src/lib/useCivicShield";
+import { formatUSDC, shortHex } from "@/src/components/TransparencyLog";
+import { POOL_ADDRESS, IS_LIVE } from "@/src/lib/contract";
 
 const SCAN = "https://basescan.org";
-
-// Proven on-chain artifacts (Base mainnet). Pool / USDC are single-sourced from the deployment
-// file via contract.ts; the agent identity and a sample donation tx are documented here as
-// verifiable BaseScan links — the whole point of this page is "don't trust us, follow the chain."
-const AGENT = "0xc0ca0981b1fc2da9009eb8393ca2df935cff15c7";
 const SAMPLE_DONATION_TX = "0x8d823db7d100ee5ee35df2fbe176bd3cac17f89910503038d74c84d4ffa7b711";
 
-// Readable label for whichever rule a blocked proposal tripped.
-const RULE_LABEL: Record<string, string> = {
-  EVENT_SCOPE_MISMATCH: "Event scope matched the pool's mandate",
-  RISK_BELOW_THRESHOLD: "Risk ≥ threshold (riskScore ≥ 75)",
-  AMOUNT_OVER_EVENT_CAP: "Amount ≤ per-event cap",
-  DAILY_LIMIT_EXCEEDED: "Within daily limit",
-  RECIPIENT_NOT_VERIFIED: "Recipient in verified allowlist",
-  PURPOSE_NOT_APPROVED: "Purpose in approved list",
-};
+/* ─── step visuals (the left panel, one per numbered tab) ─────────────────── */
 
-// The three sponsor integrations — each backed by a real link on BaseScan.
-const INTEGRATIONS = [
-  {
-    key: "lifi",
-    track: "LI.FI Composer",
-    tone: "text-rose-700 ring-rose-600/20 bg-rose-50",
-    dot: "bg-rose-500",
-    body: "Any token, one signature. We swap ETH→USDC and deposit into the pool in a single composed call.",
-    href: `${SCAN}/tx/${SAMPLE_DONATION_TX}`,
-    cta: "A real donation tx",
-  },
-  {
-    key: "cre",
-    track: "Chainlink CRE",
-    tone: "text-teal-700 ring-teal-600/20 bg-teal-50",
-    dot: "bg-teal-500",
-    body: "Hazard alerts become an on-chain riskScore. The release threshold is checked against it — not against anyone's opinion.",
-    href: `${SCAN}/address/${POOL_ADDRESS}#readContract`,
-    cta: "riskScore on the pool",
-  },
-  {
-    key: "agent",
-    track: "Multi-agent proposer",
-    tone: "text-amber-700 ring-amber-600/20 bg-amber-50",
-    dot: "bg-amber-500",
-    body: "An autonomous agent drafts the release. It can only propose — the onlyAgent role can never move funds by itself.",
-    href: `${SCAN}/address/${AGENT}`,
-    cta: "The agent identity",
-  },
-];
-
-function dotColor(record: ProposalRecord): string {
-  if (record.verdict.passed) return "bg-emerald-500";
-  if (record.verdict.status === "PENDING_REVIEW") return "bg-indigo-500";
-  if (record.verdict.status === "PENDING") return "bg-amber-500";
-  return "bg-rose-500";
+function Pill({ children, tone = "stone" }: { children: ReactNode; tone?: string }) {
+  const map: Record<string, string> = {
+    stone: "border-stone-200 bg-white text-stone-700",
+    teal: "border-teal-200 bg-teal-50 text-teal-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  };
+  return <span className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${map[tone]}`}>{children}</span>;
 }
+const Arrow = () => <span className="text-stone-300">→</span>;
 
-function ChainBlock({ record, n }: { record: ProposalRecord; n: number }) {
-  const [open, setOpen] = useState(false);
-  const { id, proposal, verdict } = record;
+// 01 — LI.FI Composer: any token in, one signature out
+function TokenFlowVisual() {
   return (
-    <li className="relative pl-12">
-      {/* node on the spine */}
-      <span
-        className={`absolute left-4 top-6 h-3.5 w-3.5 -translate-x-1/2 rounded-full ring-4 ring-[#fafaf9] ${dotColor(record)}`}
-      />
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-        <button onClick={() => setOpen((o) => !o)} className="w-full p-4 text-left hover:bg-stone-50">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[11px] text-stone-400">block #{id}</span>
-            <StatusPill status={verdict.status} />
-          </div>
-          <div className="mt-1.5 text-sm font-medium text-stone-900">
-            {formatUSDC(proposal.amount)} USDC → {shortHex(proposal.recipient)}
-          </div>
-          <p className="mt-1 text-xs text-stone-500">
-            {verdict.passed
-              ? "Policy certified — funds released."
-              : `Blocked — failed rule: ${RULE_LABEL[verdict.failReason] ?? verdict.failReason}.`}
-          </p>
-          <p className="mt-1.5 font-mono text-[11px] text-stone-400">
-            event {shortHex(proposal.eventId)} · {open ? "hide" : "show"} detail
-          </p>
-        </button>
-        {open && (
-          <div className="border-t border-stone-100 bg-stone-50 px-4 py-3 text-xs">
-            <p className="text-stone-500">
-              Purpose: <span className="text-stone-700">{proposal.purpose}</span>
-            </p>
-            <p className="mt-2 italic text-stone-500">
-              Agent reasoning (logged, not trusted): “{proposal.reasoning}”
-            </p>
-            <a
-              href={`${SCAN}/address/${POOL_ADDRESS}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-block text-stone-500 underline hover:text-stone-800"
-            >
-              Verify on BaseScan ↗
-            </a>
-          </div>
-        )}
+    <div className="w-full max-w-[440px]">
+      <div className="flex items-center justify-center gap-3">
+        <Pill>Any token</Pill>
+        <Arrow />
+        <Pill tone="teal">USDC</Pill>
+        <Arrow />
+        <Pill tone="emerald">Pool</Pill>
       </div>
-      {/* counter on the right gutter */}
-      <span className="pointer-events-none absolute right-2 top-6 hidden font-serif text-2xl text-stone-200 sm:block">
-        {String(n).padStart(2, "0")}
-      </span>
-    </li>
+      <div className="mt-5 flex items-center justify-center gap-2 text-xs text-stone-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+        LI.FI Composer · swap + deposit in one signature
+      </div>
+    </div>
   );
 }
 
+// 02 — Chainlink CRE: a verified hazard, scored
+function RiskVisual() {
+  const score = 82;
+  const threshold = 75;
+  return (
+    <div className="w-full max-w-[440px]">
+      <div className="text-center font-mono text-xs text-stone-400">event NWS-FL-0612 · flood</div>
+      <div className="relative mt-4 h-3 rounded-full bg-stone-200">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-teal-500" style={{ width: `${score}%` }} />
+        <div className="absolute inset-y-[-5px] w-px bg-rose-400" style={{ left: `${threshold}%` }} />
+        <span className="absolute top-3 -translate-x-1/2 text-[10px] text-rose-500" style={{ left: `${threshold}%` }}>
+          threshold {threshold}
+        </span>
+      </div>
+      <div className="mt-7 text-center">
+        <span className="font-serif text-3xl font-semibold text-stone-900">riskScore {score}</span>
+        <span className="ml-2 text-sm text-emerald-600">≥ {threshold} ✓</span>
+      </div>
+    </div>
+  );
+}
+
+// 03 — a multi-agent swarm proposes, across the trust boundary
+function ProposeVisual() {
+  return (
+    <div className="w-full max-w-[460px]">
+      {/* the external feed the supervisor watches */}
+      <div className="flex items-center justify-center gap-2 text-xs">
+        <span className="rounded-md border border-stone-200 bg-white px-2.5 py-1 font-mono text-stone-600">disaster API</span>
+        <span className="text-teal-600">⟳ live</span>
+      </div>
+      <div className="mx-auto my-1.5 h-3 w-px bg-stone-300" />
+
+      {/* the untrusted agent swarm */}
+      <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-3">
+        <div className="flex items-center gap-2 text-[11px] font-medium text-stone-500">
+          <span className="h-2 w-2 rounded-full bg-stone-400" /> multi-agent system · untrusted
+        </div>
+        <div className="mt-2 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-center text-xs font-medium text-stone-800">
+          Supervisor agent <span className="font-normal text-stone-400">· watches the API</span>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {["flood", "hurricane", "earthquake"].map((w) => (
+            <span key={w} className="rounded-md border border-stone-200 bg-white px-1 py-1 text-center text-[11px] text-stone-600">
+              {w}
+            </span>
+          ))}
+        </div>
+        <div className="mt-2 text-center text-[11px] text-stone-500">
+          Assessor → <span className="text-teal-700">Chainlink CRE riskScore</span>
+        </div>
+      </div>
+
+      {/* the trust boundary they hand the proposal across */}
+      <div className="my-2 flex items-center gap-2">
+        <div className="h-px flex-1 bg-gradient-to-r from-transparent to-teal-400" />
+        <span className="text-[10px] uppercase tracking-wider text-stone-400">proposes · trust boundary</span>
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent to-teal-400" />
+      </div>
+
+      <div className="flex items-center justify-center gap-2 text-xs font-medium text-teal-700">
+        <span className="h-2 w-2 rounded-full bg-teal-500" /> on-chain · the chain certifies
+      </div>
+    </div>
+  );
+}
+
+const GATES = [
+  "Event scope in mandate",
+  "Risk ≥ threshold (75)",
+  "Amount ≤ per-event cap",
+  "Within daily limit",
+  "Recipient verified",
+  "Purpose approved",
+];
+
+// 04 — the six policy rules, certifying in sequence (gentle loop)
+function GatesVisual() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setStep((s) => (s >= GATES.length + 1 ? 0 : s + 1)), 600);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="w-full max-w-[440px] space-y-1.5">
+      {GATES.map((g, i) => {
+        const state = i < step ? "pass" : i === step ? "run" : "idle";
+        return (
+          <div
+            key={g}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              state === "pass" ? "bg-emerald-50" : "bg-stone-50"
+            }`}
+          >
+            <span
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] text-white transition-colors ${
+                state === "pass" ? "bg-emerald-500" : state === "run" ? "animate-pulse bg-teal-500" : "bg-stone-200"
+              }`}
+            >
+              {state === "pass" ? "✓" : ""}
+            </span>
+            <span className="text-stone-700">
+              Rule {i + 1}: {g}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// 05 — large release escalates to a hardware wallet
+function LedgerVisual() {
+  return (
+    <div className="w-full max-w-[400px] text-center">
+      <Pill>4,500 USDC</Pill>
+      <div className="my-3 text-stone-300">↓ above auto-release cap</div>
+      <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+        <div className="mx-auto flex h-12 w-20 items-center justify-center rounded-md border-2 border-indigo-300 bg-white">
+          <span className="text-[10px] font-medium text-indigo-500">LEDGER</span>
+        </div>
+        <p className="mt-3 text-sm font-medium text-indigo-700">Awaiting hardware signature</p>
+        <p className="mt-1 text-xs text-indigo-500/80">Policy-clean, but a human device must sign.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── the steps ───────────────────────────────────────────────────────────── */
+
+const STEPS: { n: string; title: string; desc: string; visual: ReactNode }[] = [
+  {
+    n: "01",
+    title: "Any token, one signature",
+    desc: "A donor pays ETH on Base; LI.FI Composer swaps to USDC and deposits into the pool in a single signed call.",
+    visual: <TokenFlowVisual />,
+  },
+  {
+    n: "02",
+    title: "A verified hazard, not an opinion",
+    desc: "Chainlink CRE turns a real disaster alert into an on-chain riskScore. Nothing releases unless it clears the threshold.",
+    visual: <RiskVisual />,
+  },
+  {
+    n: "03",
+    title: "A multi-agent system",
+    desc: "A supervisor agent watches the disaster API in real time and dispatches worker agents — one per hazard — that do the assessment work for it. It scores severity through Chainlink CRE and drafts a release. The system can only propose; the chain certifies.",
+    visual: <ProposeVisual />,
+  },
+  {
+    n: "04",
+    title: "The chain certifies — six rules",
+    desc: "An on-chain machine checks six deterministic rules in order: scope, risk, cap, daily limit, recipient, purpose. All pass, or it blocks.",
+    visual: <GatesVisual />,
+  },
+  {
+    n: "05",
+    title: "Big releases need a human device",
+    desc: "A policy-clean release at or above the cap can't move on its own — it waits for a Ledger hardware wallet to sign.",
+    visual: <LedgerVisual />,
+  },
+];
+
+/* ─── page ────────────────────────────────────────────────────────────────── */
+
 export default function Product() {
-  const { proposals, poolBalance, executed, blocked } = useCivicShield();
+  const { poolBalance, executed, blocked } = useCivicShield();
+  const [active, setActive] = useState(0);
+
+  // gentle auto-advance; resets whenever `active` changes (incl. manual clicks)
+  useEffect(() => {
+    const t = setTimeout(() => setActive((a) => (a + 1) % STEPS.length), 5200);
+    return () => clearTimeout(t);
+  }, [active]);
 
   return (
     <main className="min-h-screen bg-[#fafaf9]">
-      <div className="mx-auto max-w-3xl px-6 py-12 sm:px-10">
+      <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10">
         {/* header */}
-        <header>
-          <p className="font-sans text-sm uppercase tracking-[0.25em] text-stone-400">Product</p>
-          <h1 className="mt-2 font-serif text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
-            Everything we shipped, on-chain.
+        <Reveal as="header">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-teal-700">Product</p>
+          <h1 className="mt-3 font-serif text-4xl font-normal leading-[1.08] tracking-tight text-stone-900 sm:text-6xl">
+            Generation is not permission.
           </h1>
-          <p className="mt-4 max-w-2xl text-lg text-stone-600">
-            Don&apos;t trust us — follow the chain. Every integration, every proposal, every release is a
-            real transaction on Base mainnet. Click anything to verify it yourself on BaseScan.
+          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-stone-600">
+            From a donor&apos;s first token to a certified release, every step is deterministic and on-chain.
+            The AI proposes — the chain decides.
           </p>
+        </Reveal>
 
-          {/* live stats */}
-          <div className="mt-6 flex flex-wrap gap-3">
-            {[
-              { label: "In the pool", value: `${formatUSDC(poolBalance)} USDC` },
-              { label: "Released", value: String(executed) },
-              { label: "Blocked", value: String(blocked) },
-              { label: "Status", value: IS_LIVE ? "Live · Base" : "Demo" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl border border-stone-200 bg-white px-4 py-2">
-                <div className="text-lg font-semibold text-stone-900">{s.value}</div>
-                <div className="text-[11px] uppercase tracking-wide text-stone-400">{s.label}</div>
-              </div>
-            ))}
+        {/* the horizontal showcase */}
+        <Reveal delay={80}>
+          <div className="mt-14 grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+            {/* left: cross-fading visual */}
+            <div className="relative grid h-[300px] place-items-center overflow-hidden rounded-[28px] border border-stone-200 bg-white p-8 sm:h-[340px]">
+              {STEPS.map((s, i) => (
+                <div
+                  key={s.n}
+                  className={`col-start-1 row-start-1 w-full transition-all duration-500 ${
+                    i === active ? "opacity-100 translate-y-0" : "pointer-events-none translate-y-2 opacity-0"
+                  }`}
+                >
+                  <div className="flex justify-center">{s.visual}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* right: numbered tab list */}
+            <div>
+              <h2 className="font-serif text-[clamp(24px,3vw,36px)] font-normal leading-[1.12] tracking-tight text-stone-900">
+                The product, end to end.
+              </h2>
+              <ul className="mt-7">
+                {STEPS.map((s, i) => {
+                  const on = i === active;
+                  return (
+                    <li key={s.n}>
+                      <button
+                        onClick={() => setActive(i)}
+                        className={`flex w-full items-start gap-4 border-l-2 py-4 pl-5 text-left transition-colors ${
+                          on ? "border-teal-600" : "border-stone-100 hover:border-stone-300"
+                        }`}
+                      >
+                        <span
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border font-mono text-[12px] transition-colors ${
+                            on ? "border-teal-600 bg-teal-600 text-white" : "border-stone-200 text-stone-400"
+                          }`}
+                        >
+                          {s.n}
+                        </span>
+                        <span>
+                          <span className={`block text-[17px] transition-colors ${on ? "font-semibold text-stone-900" : "text-stone-400"}`}>
+                            {s.title}
+                          </span>
+                          <span
+                            className={`grid overflow-hidden transition-all duration-300 ${
+                              on ? "mt-1.5 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                            }`}
+                          >
+                            <span className="overflow-hidden text-[14px] leading-[1.6] text-stone-600">{s.desc}</span>
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
-        </header>
+        </Reveal>
 
-        {/* integrations — the three sponsor tracks, each a real link */}
-        <section className="mt-12">
-          <h2 className="font-serif text-xl font-semibold text-stone-900">The integrations</h2>
-          <p className="mt-1 text-sm text-stone-500">Three sponsors, wired end to end. Each card opens its proof.</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {INTEGRATIONS.map((it) => (
+        {/* it's live, not a slideshow */}
+        <Reveal>
+          <section className="mt-20 rounded-3xl border border-stone-200 bg-white p-8">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="font-serif text-2xl font-normal text-stone-900">This isn&apos;t a slideshow.</h2>
+                <p className="mt-1.5 text-sm text-stone-500">
+                  The same machine runs live on Base mainnet. Donate, and you trigger a real evaluation.
+                </p>
+              </div>
               <a
-                key={it.key}
-                href={it.href}
+                href={`${SCAN}/address/${POOL_ADDRESS}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex flex-col rounded-2xl border border-stone-200 bg-white p-5 transition-colors hover:border-stone-300"
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:border-stone-400"
               >
-                <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${it.tone}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${it.dot}`} />
-                  {it.track}
-                </span>
-                <p className="mt-3 flex-1 text-sm text-stone-600">{it.body}</p>
-                <span className="mt-4 text-sm font-medium text-stone-900 group-hover:underline">{it.cta} ↗</span>
+                Contract {shortHex(POOL_ADDRESS)} ↗
               </a>
-            ))}
-          </div>
-        </section>
+            </div>
 
-        {/* the chain — genesis pool block, then the live proposal blocks */}
-        <section className="mt-12">
-          <h2 className="font-serif text-xl font-semibold text-stone-900">The chain</h2>
-          <p className="mt-1 text-sm text-stone-500">
-            The pool, then every release the AI proposed and the policy certified — newest reads at the bottom.
-          </p>
-
-          <div className="relative mt-6">
-            {/* the spine */}
-            <div className="absolute left-4 top-2 bottom-2 w-px -translate-x-1/2 bg-stone-200" />
-
-            <ol className="space-y-4">
-              {/* genesis */}
-              <li className="relative pl-12">
-                <span className="absolute left-4 top-6 h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-stone-900 ring-4 ring-[#fafaf9]" />
-                <div className="rounded-xl border border-stone-300 bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-mono text-[11px] text-stone-400">genesis</span>
-                    <span className="inline-flex items-center rounded-full bg-stone-900 px-2.5 py-0.5 text-xs font-semibold text-white">
-                      DEPLOYED
-                    </span>
-                  </div>
-                  <div className="mt-1.5 text-sm font-medium text-stone-900">CivicShieldPool — escrow + policy engine</div>
-                  <p className="mt-1 text-xs text-stone-500">
-                    Six deterministic rules. The agent proposes, this contract certifies, releases ≥ threshold need a
-                    Ledger. Deployed at block {POOL_DEPLOY_BLOCK.toLocaleString("en-US")}.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px]">
-                    <a href={`${SCAN}/address/${POOL_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-stone-500 underline hover:text-stone-800">
-                      pool {shortHex(POOL_ADDRESS)} ↗
-                    </a>
-                    <a href={`${SCAN}/address/${USDC_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-stone-500 underline hover:text-stone-800">
-                      USDC {shortHex(USDC_ADDRESS)} ↗
-                    </a>
-                  </div>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "In the pool", value: `${formatUSDC(poolBalance)} USDC` },
+                { label: "Released", value: String(executed) },
+                { label: "Blocked", value: String(blocked) },
+                { label: "Status", value: IS_LIVE ? "Live · Base" : "Demo" },
+              ].map((st) => (
+                <div key={st.label} className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+                  <div className="text-lg font-semibold text-stone-900">{st.value}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-stone-400">{st.label}</div>
                 </div>
-              </li>
-
-              {/* proposal blocks */}
-              {proposals.map((r, i) => (
-                <ChainBlock key={r.id} record={r} n={i + 1} />
               ))}
+            </div>
 
-              {proposals.length === 0 && (
-                <li className="relative pl-12">
-                  <span className="absolute left-4 top-6 h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-stone-300 ring-4 ring-[#fafaf9]" />
-                  <p className="rounded-xl border border-dashed border-stone-300 p-6 text-sm text-stone-400">
-                    No releases proposed on-chain yet — the chain starts at the pool above.
-                  </p>
-                </li>
-              )}
-            </ol>
-          </div>
-        </section>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {[
+                { t: "LI.FI Composer", b: "Any token, one signature → USDC into the pool.", href: `${SCAN}/tx/${SAMPLE_DONATION_TX}`, cta: "A real donation tx", dot: "bg-rose-500" },
+                { t: "Chainlink CRE", b: "Hazard alerts become an on-chain riskScore.", href: `${SCAN}/address/${POOL_ADDRESS}#readContract`, cta: "riskScore on-chain", dot: "bg-teal-500" },
+              ].map((it) => (
+                <a
+                  key={it.t}
+                  href={it.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex flex-col rounded-xl border border-stone-200 p-4 transition-colors hover:border-stone-300"
+                >
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-stone-900">
+                    <span className={`h-1.5 w-1.5 rounded-full ${it.dot}`} />
+                    {it.t}
+                  </span>
+                  <p className="mt-2 flex-1 text-xs text-stone-500">{it.b}</p>
+                  <span className="mt-3 text-xs font-medium text-stone-700 group-hover:underline">{it.cta} ↗</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        </Reveal>
 
-        <p className="mt-12 border-t border-stone-200 pt-6 text-center font-serif text-sm italic text-stone-400">
-          Generation is not permission. The chain is the gate.{" "}
+        <p className="mt-16 text-center font-serif text-sm italic text-stone-400">
+          The chain is the gate.{" "}
           <Link href="/technology" className="not-italic underline hover:text-stone-700">
             See how it&apos;s built →
           </Link>
