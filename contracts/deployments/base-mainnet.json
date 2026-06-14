@@ -2,6 +2,9 @@
   "chainId": 8453,
   "network": "base-mainnet",
   "CivicShieldPool": "0x8df17313f37f5418868f1c3c369bbde4dba9daa6",
+  "CivicShieldPoolBlock": 47291506,
+  "DonorRegistry": "0xf1f2528A8fD2ebD1a468094eD129fD7EF9BebAC5",
+  "DonorRegistryBlock": 47302352,
   "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "abi": [
     {

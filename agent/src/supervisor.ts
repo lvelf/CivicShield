@@ -10,8 +10,13 @@ export interface Candidate {
 	deterministicScore: number // 0..100 from score.ts — the cheap pre-filter
 }
 
-async function fetchFloodAlerts(area: string): Promise<CapAlert[]> {
-	const res = await fetch(`https://api.weather.gov/alerts/active?area=${area}&event=Flood%20Warning`, {
+async function fetchFloodAlerts(area?: string): Promise<CapAlert[]> {
+	// Nationwide when area is empty / "US" / "ALL"; otherwise filter to that state.
+	const nationwide = !area || area === 'US' || area === 'ALL'
+	const url = nationwide
+		? 'https://api.weather.gov/alerts/active?event=Flood%20Warning'
+		: `https://api.weather.gov/alerts/active?area=${area}&event=Flood%20Warning`
+	const res = await fetch(url, {
 		headers: { 'User-Agent': UA, Accept: 'application/geo+json' },
 	})
 	if (!res.ok) throw new Error(`weather.gov ${res.status}`)
@@ -24,7 +29,7 @@ async function fetchFloodAlerts(area: string): Promise<CapAlert[]> {
  * else null (nothing worth spending an LLM call / gas on). `minScore` below the on-chain
  * threshold lets the assessor still look at borderline events; tune as needed.
  */
-export async function monitorScope(area: string, minScore = 50): Promise<Candidate | null> {
+export async function monitorScope(area?: string, minScore = 50): Promise<Candidate | null> {
 	const top = topFloodRisk(await fetchFloodAlerts(area))
 	if (!top || top.riskScore < minScore) return null
 	return { alert: top.alert, deterministicScore: top.riskScore }

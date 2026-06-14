@@ -9,9 +9,12 @@ import {
   useSwitchChain,
   useSendTransaction,
   useWaitForTransactionReceipt,
+  useWriteContract,
 } from "wagmi";
 import { formatEther } from "viem";
 import { getDonateTx } from "@/src/lib/lifi";
+import { CITIES } from "@/src/lib/cities";
+import { REGISTRY_ADDRESS, REGISTRY_ABI, REGISTRY_LIVE } from "@/src/lib/registry";
 
 type Phase = "idle" | "connecting" | "quoting" | "signing" | "pending" | "error";
 
@@ -40,6 +43,13 @@ export function DonateWidget() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [hash, setHash] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | null>(null);
+
+  // Opt-in donor region: "" = stay anonymous. Stored on-chain via DonorRegistry.declare().
+  const [region, setRegion] = useState("");
+  const { writeContractAsync } = useWriteContract();
+  const [regionHash, setRegionHash] = useState<`0x${string}` | undefined>();
+  const [regionBusy, setRegionBusy] = useState(false);
+  const { isSuccess: regionDone } = useWaitForTransactionReceipt({ hash: regionHash, chainId: 8453 });
 
   // Base-mainnet ETH balance — the donation pays real ETH on Base; testnet funds can't route.
   const { data: baseBalance } = useBalance({ address, chainId: 8453, query: { enabled: isConnected } });
@@ -100,6 +110,33 @@ export function DonateWidget() {
       console.error("[donate] raw error:", e);
       setError(friendlyError(e));
       setPhase("error");
+    }
+  }
+
+  async function declareRegion() {
+    setError(null);
+    setRegionHash(undefined);
+    if (!region) return;
+    try {
+      setRegionBusy(true);
+      if (!isConnected) {
+        const connector = connectors.find((c) => c.id === "injected") ?? connectors[0];
+        if (!connector) throw new Error("No wallet found. Install MetaMask.");
+        await connectAsync({ connector });
+      }
+      if (chainId !== 8453) await switchChainAsync({ chainId: 8453 });
+      const h = await writeContractAsync({
+        address: REGISTRY_ADDRESS as `0x${string}`,
+        abi: REGISTRY_ABI,
+        functionName: "declare",
+        args: [region],
+        chainId: 8453,
+      });
+      setRegionHash(h);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setRegionBusy(false);
     }
   }
 
@@ -196,6 +233,47 @@ export function DonateWidget() {
         </p>
       )}
       {error && <p className="mt-3 text-center text-sm text-rose-600">{error}</p>}
+
+      {REGISTRY_LIVE && (
+        <div className="mt-5 border-t border-stone-100 pt-4">
+          <label className="text-xs font-medium text-stone-600">
+            Show where you&apos;re donating from <span className="text-stone-400">(optional, on-chain)</span>
+          </label>
+          <div className="mt-2 flex gap-2">
+            <select
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              disabled={regionBusy}
+              className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none focus:border-teal-600 disabled:opacity-50"
+            >
+              <option value="">Stay anonymous</option>
+              {CITIES.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={declareRegion}
+              disabled={!region || regionBusy}
+              className="shrink-0 rounded-lg border border-teal-600 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {regionBusy ? "Signing…" : "Pin on map"}
+            </button>
+          </div>
+          {regionDone && regionHash && (
+            <p className="mt-2 text-xs text-emerald-700">
+              ✓ {region} pinned.{" "}
+              <a href={`https://basescan.org/tx/${regionHash}`} target="_blank" rel="noopener noreferrer" className="underline">
+                tx
+              </a>
+            </p>
+          )}
+          <p className="mt-1.5 text-[11px] text-stone-400">
+            Self-attested via DonorRegistry — anonymous by default. Use the same wallet you donate with.
+          </p>
+        </div>
+      )}
 
       <p className="mt-3 text-center text-[11px] text-stone-400">
         {!isConnected

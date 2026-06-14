@@ -8,6 +8,8 @@ export const POOL_ADDRESS = deployment.CivicShieldPool as `0x${string}`;
 export const POOL_ABI = deployment.abi as unknown as Abi;
 export const POOL_CHAIN_ID = Number(deployment.chainId); // 8453 = Base mainnet
 export const USDC_ADDRESS = deployment.USDC as `0x${string}`;
+// Block the pool was deployed at — the floor for chunked event scans (public RPCs cap getLogs span).
+export const POOL_DEPLOY_BLOCK = Number((deployment as { CivicShieldPoolBlock?: number }).CivicShieldPoolBlock ?? 0);
 
 // true once a real address is present — flips the whole UI from mocks to on-chain reads.
 export const IS_LIVE = /^0x[a-fA-F0-9]{40}$/.test(POOL_ADDRESS);

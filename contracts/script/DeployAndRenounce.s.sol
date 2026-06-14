@@ -24,6 +24,10 @@ contract DeployAndRenounce is Script {
     uint256 constant MAX_RELEASE_PER_EVENT = 5e6; // 5 USDC
     uint256 constant DAILY_RELEASE_LIMIT = 15e6; // 15 USDC (trace-level, per UTC day)
 
+    // Fund scope — the single hazard class this pool may act on (rule 0 EVENT_SCOPE_MISMATCH).
+    // Frozen at construction. Must match the relayer's eventScope and the agent's proposal scope.
+    bytes32 constant FUND_SCOPE = keccak256("US|flood");
+
     // Circle native USDC on Base mainnet. Override with USDC_ADDRESS only if you know why.
     address constant BASE_MAINNET_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
@@ -37,6 +41,12 @@ contract DeployAndRenounce is Script {
         address relayer = vm.envAddress("RELAYER_ADDRESS");
         require(relayer != address(0), "RELAYER_ADDRESS unset");
         require(relayer != deployer, "relayer MUST be a separate key from the deployer/owner");
+
+        // --- INDEPENDENT agent role: the Privy server wallet that calls proposeRelease. A
+        // SEPARATE key from owner + relayer. After renounce, setAgent is frozen, so this is permanent.
+        address agent = vm.envAddress("AGENT_ADDRESS");
+        require(agent != address(0), "AGENT_ADDRESS unset");
+        require(agent != relayer, "agent MUST be a separate key from the relayer");
 
         // Resolved address of shelter-fund.eth (rule 4 allowlist). Frozen after renounce.
         address verifiedRecipient = vm.envAddress("VERIFIED_RECIPIENT");
@@ -56,7 +66,7 @@ contract DeployAndRenounce is Script {
         // 1. Deploy — every owner-only setting is baked into the constructor, so there is
         //    nothing left to configure that renounce would lock out.
         CivicShieldPool pool = new CivicShieldPool(
-            usdc, relayer, RISK_THRESHOLD, MAX_RELEASE_PER_EVENT, DAILY_RELEASE_LIMIT, purposes, recipients
+            usdc, agent, relayer, FUND_SCOPE, RISK_THRESHOLD, MAX_RELEASE_PER_EVENT, DAILY_RELEASE_LIMIT, purposes, recipients
         );
 
         // 2. Optional: fund the escrow with real USDC the deployer already holds (or skip and
@@ -76,6 +86,8 @@ contract DeployAndRenounce is Script {
 
         // --- post-conditions (view calls — safe after renounce) ---
         require(pool.relayer() == relayer, "relayer not set");
+        require(pool.agent() == agent, "agent not set");
+        require(pool.fundScope() == FUND_SCOPE, "fundScope mismatch");
         require(pool.isVerifiedRecipient(verifiedRecipient), "recipient not verified");
         if (doRenounce) {
             require(pool.owner() == address(0), "renounce failed");
@@ -86,6 +98,7 @@ contract DeployAndRenounce is Script {
         console.log("CivicShieldPool: ", address(pool));
         console.log("USDC:            ", usdc);
         console.log("Owner:           ", pool.owner());
+        console.log("Agent (indep):   ", agent);
         console.log("Relayer (indep): ", relayer);
         console.log("Verified recip:  ", verifiedRecipient);
         console.log("Funded (base u): ", funding);

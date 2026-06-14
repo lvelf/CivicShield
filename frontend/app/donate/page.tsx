@@ -1,9 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { DonateWidget } from "@/src/components/DonateWidget";
 import { WorldMap } from "@/src/components/WorldMap";
 import { TransparencyLog, formatUSDC } from "@/src/components/TransparencyLog";
 import { useCivicShield } from "@/src/lib/useCivicShield";
+import { HAZARD_ORDER, type HazardType } from "@/src/lib/hazards";
 
 const FLOW = [
   { t: "Donate", d: "Any token, any chain → USDC into the pool (LI.FI Composer)." },
@@ -14,8 +17,24 @@ const FLOW = [
 ];
 
 export default function DonatePage() {
+  // useSearchParams must sit inside a Suspense boundary in the app router.
+  return (
+    <Suspense>
+      <DonatePageInner />
+    </Suspense>
+  );
+}
+
+function DonatePageInner() {
   const { proposals, poolBalance, executed, blocked, totalReleased } = useCivicShield();
   const pendingReview = proposals.filter((p) => p.verdict.status === "PENDING_REVIEW").length;
+
+  // Optional deep-link from the disasters page: /donate?hazard=wildfire focuses that layer first.
+  const searchParams = useSearchParams();
+  const hazardParam = searchParams.get("hazard");
+  const initialHazards: HazardType[] | undefined = HAZARD_ORDER.includes(hazardParam as HazardType)
+    ? [hazardParam as HazardType]
+    : undefined;
 
   return (
     <main className="bg-[#fafaf9]">
@@ -78,7 +97,7 @@ export default function DonatePage() {
             brightens once a real release executes.
           </p>
           <div className="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 sm:p-8">
-            <WorldMap executed={executed} blocked={blocked} />
+            <WorldMap executed={executed} blocked={blocked} initialHazards={initialHazards} />
           </div>
         </div>
 
