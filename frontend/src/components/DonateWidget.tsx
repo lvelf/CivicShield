@@ -196,8 +196,8 @@ export function DonateWidget() {
           <span className="text-sm text-stone-400">$</span>
           <input
             type="number"
-            min={0.1}
-            step={0.1}
+            min={0.01}
+            step={0.01}
             value={amount}
             onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
             disabled={busy}
