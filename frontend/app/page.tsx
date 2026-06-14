@@ -30,8 +30,6 @@ export default function Home() {
           Start →
         </Link>
       </div>
-
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce text-white/50">↓</div>
     </section>
   );
 }

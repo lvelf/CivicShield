@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/disasters", label: "Disasters" },
   { href: "/donate", label: "Donate" },
   { href: "/technology", label: "Technology" },
+  { href: "/product", label: "Product" },
 ];
 
 // Shared top nav. Transparent over the dark hero on "/", solid on the inner light pages.
