@@ -61,17 +61,21 @@ For a normal DeFi agent, risk is the brake. For a relief fund, **disaster risk i
  │     amount ≥ reviewThreshold → PENDING_REVIEW (await Ledger)              │
  │     else                      → transfer USDC to the verified recipient   │
  │  → emits ActionEvaluated (pass OR block) → Transparency Log               │
- └─────▲────────────────────────────────▲──────────────────────┬───────────┘
-       │ proposeRelease()                │ approveRelease()      │ USDC out
-       │ onlyAgent · no fund keys        │ onlyApprover          ▼
- ┌─────┴────────────────────┐    ┌───────┴────────┐    ┌────────────────────┐
- │ Multi-agent proposer      │    │ Ledger device  │    │ verified recipient  │
- │ supervisor → assessor     │    │ human-in-the-  │    │ shelter-fund.eth    │
- │ (OpenAI) · rate-limited   │    │ loop for large │    │ (ENS subname)       │
- │ signs via Privy Agent     │    │ releases       │    └────────────────────┘
- │ Wallet · GitHub Actions   │    └────────────────┘
- │ cron (no raw key)         │
- └───────────────────────────┘
+ └──▲──────────────────▲───────────────────▲────────────────────┬──────────┘
+    │ proposeRelease()  │ executeRelease()   │ approveRelease()    │ USDC out
+    │ onlyAgent         │ PERMISSIONLESS     │ onlyApprover        ▼
+ ┌──┴─────────────┐ ┌───┴────────────┐ ┌─────┴────────┐  ┌────────────────────┐
+ │ Multi-agent    │ │ Keeper          │ │ Ledger device │  │ verified recipient  │
+ │ proposer       │ │ (cron/--watch)  │ │ human-in-the- │  │ shelter-fund.eth    │
+ │ supervisor →   │ │ settles fresh   │ │ loop for      │  │ (ENS subname)       │
+ │ assessor(OpenAI)│ │ PENDING + auto- │ │ large         │  └────────────────────┘
+ │ Privy Wallet · │ │ settles on      │ │ releases      │
+ │ cron · no key  │ │ ReleaseApproved │ └───────────────┘
+ └────────────────┘ └─────────────────┘
+   proposes only      no special power —      human authorizes
+                      anyone could call;      the large ones
+                      the keeper guarantees
+                      someone always does
 ```
 
 **Settlement chain: Base mainnet** — LI.FI Composer's one-Flow contract deposit is mainnet-only, so the full *donate → certify → release* path runs here on tiny real USDC (demo scale: auto < \$5 · Ledger review \$5–\$10 · blocked > \$10). The contract is chain-portable. The chain's authority is never delegated: the agent only *proposes*, the CRE-attested `riskScore` (not the agent) is the release condition, and a manipulated agent can at worst miss a disaster — never cause a wrongful release. Live addresses + proven end-to-end flow: [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md); LI.FI routing findings: [`docs/lifi-composer-findings.md`](docs/lifi-composer-findings.md).
@@ -84,10 +88,13 @@ For a normal DeFi agent, risk is the brake. For a relief fund, **disaster risk i
 | Hazard oracle | `cre/` + `hazard-workflow/` | Chainlink **CRE** (TS) | `api.weather.gov` → deterministic `riskScore` (consensus, no LLM) | ✅ simulated |
 | Score delivery | `relayer/` | viem | submit `riskScore` + attested scope on-chain | ✅ verified |
 | Proposer (AI) | `agent/` | OpenAI + **Privy** Agent Wallet · GitHub Actions cron | supervisor → assessor → `proposeRelease`, rate-limited, no raw key | ✅ live on free cron |
-| Approval | — | **Ledger** | `approveRelease` for large releases | ✅ wired |
+| Settler (keeper) | `agent/keeper.ts` | viem · cron / `--watch` | calls **permissionless** `executeRelease` so settlement is automatic, not manual: settles fresh `PENDING`, and settles `PENDING_REVIEW` the moment a Ledger `ReleaseApproved` fires | ✅ built |
+| Approval | `ledger/` | **Ledger** DMK + Ethereum signer · Speculos | `approveRelease` for large releases — human signs on the device; Clear Signing (ERC-7730) descriptor included | ✅ end-to-end on-chain |
 | Donation intake | `frontend/` | Next.js · wagmi · **LI.FI Composer** | one-click: any token → swap + `donate()` in one signature | ✅ live |
 
-**End-to-end flow:** donor → LI.FI Composer → pool · weather.gov → CRE → relayer → on-chain `riskScore` · supervisor → assessor(OpenAI) → Privy-signed `proposeRelease` · `executeRelease` → 6-rule policy → release, or `PENDING_REVIEW` → Ledger `approveRelease`. Every outcome logged on-chain.
+**Who calls what (no manual steps in production):** the **agent** only `proposeRelease` (it holds no fund keys). Settlement is *permissionless by design* — the policy guards the money, not the caller — so a **keeper** (`agent/keeper.ts`, a cron or `--watch` daemon) is what actually calls `executeRelease`. A clean small proposal settles instantly; a large one is held as `PENDING_REVIEW`; once a human signs `approveRelease` on a **Ledger**, the keeper sees the `ReleaseApproved` event and settles it automatically. No trusted operator, no manual poking — anyone *could* call `executeRelease`, the keeper just guarantees someone always does.
+
+**End-to-end flow:** donor → LI.FI Composer → pool · weather.gov → CRE → relayer → on-chain `riskScore` · supervisor → assessor(OpenAI) → Privy-signed `proposeRelease` · **keeper** → `executeRelease` → 6-rule policy → release, or `PENDING_REVIEW` → Ledger `approveRelease` → keeper auto-settles on `ReleaseApproved`. Every outcome logged on-chain.
 
 ---
 
@@ -152,7 +159,13 @@ wallet, and the wallet address is the contract's `onlyAgent` principal. This is 
 run unattended (GitHub Actions cron) without a private key sitting in a secret.
 
 ### Ledger — *AI Agents x Ledger*
-A manipulated or buggy AI must never move large public money unchecked. CivicShield makes a **Ledger** hardware wallet the `approver`: any release ≥ `reviewThreshold` is frozen in `PENDING_REVIEW` until the Ledger device signs `approveRelease`. Ledger-backed security is the central gate on high-value autonomous actions — the AI proposes, the policy certifies, and a human device authorizes the large ones.
+A manipulated or buggy AI must never move large public money unchecked. CivicShield makes a **Ledger** hardware wallet the `approver`: any release ≥ `reviewThreshold` is frozen in `PENDING_REVIEW` until the Ledger device signs `approveRelease`. The device-held key is the central gate on high-value autonomous actions — the AI proposes, the policy certifies, and a human device authorizes the large ones. **Generation is not permission: the AI can draft a transfer, but only the hardware-held human key releases it.**
+
+Concrete use of Ledger primitives (`ledger/`), not wallet branding:
+- **Device Management Kit (DMK)** + `device-signer-kit-ethereum` drive the signing flow (`ledger/src/approve-release.ts`): connect → review → sign `approveRelease` → broadcast. The key never leaves the device.
+- **Clear Signing (ERC-7730)** descriptor (`ledger/clear-signing/civicshield-pool.erc7730.json`) so the device shows *"Approve disaster-relief release · Proposal #N"* instead of raw hex.
+- **Proven end-to-end on Base mainnet via the Speculos emulator** (no physical device needed for the demo — swap one transport line for real hardware): agent proposed → held `PENDING_REVIEW` → device signed `approveRelease` ([`ReleaseApproved`](https://basescan.org/tx/0x309d45f4fba109aca79e9f0a52d561ad6277990fcd07ba6707882f149c60cb69)) → keeper settled → [`EXECUTED`](https://basescan.org/tx/0x9eda5767b240b79073164220f69e3c3179b340930774eeb763776e2d1f50f2a0).
+- Developer-experience feedback on the DMK docs & SDKs: [`ledger/LEDGER-FEEDBACK.md`](ledger/LEDGER-FEEDBACK.md).
 
 ---
 
@@ -163,7 +176,8 @@ contracts/        CivicShieldPool.sol — escrow + 6-rule policy + ActionEvaluat
 cre/              score.ts — deterministic CAP→riskScore core + offchain proof
 hazard-workflow/  Chainlink CRE workflow (TS): api.weather.gov → riskScore (cre simulate)
 relayer/          Submits CRE score + attested scope on-chain (submitRiskScore)
-agent/            Multi-agent proposer: supervisor + assessor (OpenAI) → proposeRelease
+agent/            Multi-agent proposer (supervisor + assessor → proposeRelease) + keeper.ts (auto executeRelease)
+ledger/           Ledger human-in-the-loop approval: DMK signer + Clear Signing (ERC-7730) + Speculos
 frontend/         Donate · Agent Proposals · Approve/Block · Transparency Log
 docs/             DEPLOYMENTS.md, lifi-composer-findings.md, INTERFACES.md
 ```

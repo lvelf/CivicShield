@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Multi-agent proposer: supervisor monitors a scope, assessor (OpenAI) judges severity and drafts a proposal, then proposeRelease on-chain. The agent has no power to move funds.",
   "scripts": {
-    "run": "node --experimental-strip-types src/run.ts"
+    "run": "node --experimental-strip-types src/run.ts",
+    "keeper": "node --experimental-strip-types src/keeper.ts",
+    "keeper:watch": "node --experimental-strip-types src/keeper.ts --watch"
   },
   "dependencies": {
     "@privy-io/server-auth": "^1.32.5",
