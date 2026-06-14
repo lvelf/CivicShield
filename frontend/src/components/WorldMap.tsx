@@ -11,8 +11,10 @@ import {
   type HazardType,
 } from "@/src/lib/hazards";
 import { fetchDonations, type Donation } from "@/src/lib/donations";
-import { fetchRegions } from "@/src/lib/registry";
+import { fetchRegions, REGISTRY_ADDRESS } from "@/src/lib/registry";
+import { POOL_ADDRESS } from "@/src/lib/contract";
 import { CITIES, cityCoord } from "@/src/lib/cities";
+import { useCached } from "@/src/lib/useCached";
 
 // Equirectangular projection into a 360×180 viewBox (1 unit = 1°).
 type LngLat = [number, number];
@@ -56,6 +58,13 @@ const RELIEF: LngLat = [-92, 30]; // fallback US point before any hazard data lo
 // who self-declare a city via DonorRegistry are placed at their real coordinates instead.
 const ANON_ANCHORS: LngLat[] = CITIES.map((c) => c.coord);
 
+// Stable fallbacks + cache keys for the cached donor reads. Keys are namespaced by contract address
+// so a redeploy (new POOL/REGISTRY) invalidates stale cached donations rather than showing them.
+const EMPTY_DONATIONS: Donation[] = [];
+const EMPTY_REGIONS: Record<string, string> = {};
+const DONATIONS_KEY = `donations:${POOL_ADDRESS}`;
+const REGIONS_KEY = `regions:${REGISTRY_ADDRESS}`;
+
 export function WorldMap({
   executed,
   blocked,
@@ -75,8 +84,10 @@ export function WorldMap({
   const [active, setActive] = useState<Set<HazardType>>(
     () => new Set(initialHazards && initialHazards.length ? initialHazards : HAZARD_ORDER),
   );
-  const [donations, setDonations] = useState<Donation[]>([]);
-  const [regions, setRegions] = useState<Record<string, string>>({});
+  // Stale-while-revalidate: paint the last-known donors/regions from localStorage instantly, then
+  // refresh from chain in the background. Kills the cold getLogs wait that delayed donors each load.
+  const donations = useCached<Donation[]>(DONATIONS_KEY, fetchDonations, EMPTY_DONATIONS);
+  const regions = useCached<Record<string, string>>(REGIONS_KEY, fetchRegions, EMPTY_REGIONS);
 
   useEffect(() => {
     let alive = true;
@@ -102,32 +113,6 @@ export function WorldMap({
         })
         .catch(() => {});
     });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Real on-chain donations (Donated events) — one inbound arc per real donation.
-  useEffect(() => {
-    let alive = true;
-    fetchDonations()
-      .then((d) => {
-        if (alive) setDonations(d);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Opt-in self-declared donor regions (DonorRegistry) — joined to donations by address below.
-  useEffect(() => {
-    let alive = true;
-    fetchRegions()
-      .then((r) => {
-        if (alive) setRegions(r);
-      })
-      .catch(() => {});
     return () => {
       alive = false;
     };
