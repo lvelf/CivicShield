@@ -71,17 +71,6 @@ export default function DisastersPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-stone-950/85 via-stone-950/30 to-stone-950/10" />
 
-              {/* status chip */}
-              <span
-                className={`absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${
-                  d.live
-                    ? "bg-emerald-500/90 text-white ring-white/30"
-                    : "bg-white/15 text-white ring-white/30 backdrop-blur"
-                }`}
-              >
-                {d.live ? "LIVE" : "Preview"}
-              </span>
-
               {/* base title */}
               <div className="absolute inset-x-0 bottom-0 p-5">
                 <h2 className="font-serif text-2xl font-semibold text-white">{d.name}</h2>
@@ -90,18 +79,12 @@ export default function DisastersPage() {
                 <div className="max-h-0 overflow-hidden opacity-0 transition-all duration-500 group-hover:max-h-64 group-hover:opacity-100">
                   <p className="mt-2 text-sm text-white/85">{d.stat}</p>
                   <p className="mt-2 text-xs text-white/65">{d.detail}</p>
-                  {d.live ? (
-                    <Link
-                      href="/donate"
-                      className="mt-4 inline-flex rounded-full bg-white px-5 py-2 text-sm font-semibold text-stone-900 transition-colors hover:bg-white/90"
-                    >
-                      Donate to flood relief →
-                    </Link>
-                  ) : (
-                    <span className="mt-4 inline-flex rounded-full bg-white/10 px-4 py-2 text-xs font-medium text-white/70 ring-1 ring-inset ring-white/20">
-                      Multi-scope — coming soon
-                    </span>
-                  )}
+                  <Link
+                    href={`/donate?hazard=${d.key}`}
+                    className="mt-4 inline-flex rounded-full bg-white px-5 py-2 text-sm font-semibold text-stone-900 transition-colors hover:bg-white/90"
+                  >
+                    View {d.name.toLowerCase()} monitoring →
+                  </Link>
                 </div>
               </div>
             </div>
